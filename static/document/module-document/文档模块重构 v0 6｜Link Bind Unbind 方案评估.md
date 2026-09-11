@@ -67,38 +67,46 @@ LINK
 
 前端清理 `[[]` 残片、创建 `resourceReference` 或删除节点，应在同一个 Yjs 事务中形成一个可关联的 Link 更新。前端 pending 队列需要保留帧类型、Envelope 和重试 ID，不能在重连时重新猜测更新类型。
 
-### 1.3 Binding Consumer 批处理
+### 1.3 Binding Consumer 批处理与单例顺序
 
 Binding Consumer 的处理流程为：
 
 ```text
-批量读取 Binding Stream
+按 Binding Stream 顺序批量读取
   → BindingCodec 解码
-  → 按 commandType 分为 BindSet / UnbindSet
-  → 生成候选 CSet / DSet
+  → 按关系键有序折叠
+  → 生成 CSet / DSet
   → 批量执行关系表 Upsert
   → 数据库事务提交
   → XACK / XDEL
 ```
 
-集合模型暂按以下方式记录：
+v0.6 采用单一活跃消费者顺序处理 Binding Stream。所有 BIND 和 UNBIND 都进入同一条 `document:bindings:{documentId}` Stream，Redis Stream ID 作为单例阶段的接收顺序；同一个关系键不并行处理。
+
+集合不再使用两个集合的差集计算，而是按 Stream ID 升序对关系键进行有序折叠：
 
 ```text
-CSet = BindSet - UnbindSet
-DSet = UnbindSet - CSet
+for message in Binding Stream order:
+    key = (source_id, resource_type, target_id)
+    latest[key] = message.commandType
+
+CSet = latest 中 commandType = BIND 的关系键
+DSet = latest 中 commandType = UNBIND 的关系键
 ```
 
-其中集合元素是关系键，而不是原始二进制消息。若同一关系键同时出现在两个集合中，上述公式会退化为解绑。批次内应采用版本优先、Stream 顺序优先或解绑优先，当前 v0.6 不冻结其中任何一种规则，只保留该风险，不能由实现者自行将某一种策略默认为最终协议语义。
+其中集合元素是关系键，而不是原始二进制消息。这样同一批次内的 `BIND → UNBIND` 最终进入 `DSet`，`UNBIND → BIND` 最终进入 `CSet`。跨批次消息依赖单例消费者的连续顺序和数据库当前状态继续处理。
 
 消费者约束：
 
-- 通过 Redis Stream Consumer Group 批量读取，并保留每条消息的 Stream ID；
+- v0.6 使用单一活跃消费者按 Stream ID 升序读取，并保留每条消息的 Stream ID；
 - 按 `commandType` 翻译 Binding 二进制内容，不调用 `Y.applyUpdate`，不解析 Yjs；
-- 使用 `operationId` 做幂等校验，使用 `refVersion` 防止旧消息覆盖新状态；
+- 使用 `operationId` 做重复消息幂等校验；
 - 数据库事务提交后再确认和删除 Stream 消息；
 - 非法 payload 进入失败重试或死信流程；
-- 支持 Pending 消息恢复；
+- 单例阶段只把 Stream ID 作为接收顺序，不将其解释为客户端真实操作意图；
 - 跨不同 Stream 不假定存在全局顺序，关系归并至少按来源文档和关系键隔离。
+
+后续多实例扩展只保留方向：引入 `refVersion` 作为业务顺序版本，关系表保存当前版本，消费者使用 `incoming.refVersion > current.refVersion` 的 CAS 条件更新；低版本消息直接确认，不重复重试。多实例通过 Consumer Group 扩展，同一个关系键不并行更新；如果客户端自增无法保证多写者唯一顺序，再由 Redis 或服务端生成版本。
 
 ### 1.4 关系表写入语义
 
@@ -122,7 +130,7 @@ INSERT ... ON DUPLICATE KEY UPDATE
   is_delete = 1
 ```
 
-两类操作都必须携带版本条件，不能让旧的 Bind 或 Unbind 无条件覆盖新状态。解绑时关系行不存在，也允许写入 `is_delete = 1` 的墓碑记录。
+单例阶段主要依赖 Binding Stream 顺序，不提前引入复杂版本冲突策略；后续启用 `refVersion` 后，两类操作都必须携带版本条件，不能让旧的 Bind 或 Unbind 无条件覆盖新状态。解绑时关系行不存在，也允许写入 `is_delete = 1` 的墓碑记录。
 
 本方案假设同一来源到同一目标只保留一条关系，不区分多个 `resourceReference.refId`。如果未来需要按引用节点区分关系，则需要调整关系粒度或增加引用明细表，超出本次冻结范围。
 
@@ -135,11 +143,11 @@ XADD document:updates:{documentId}  ...raw Yjs update...
 XADD document:bindings:{documentId} ...BindingEnvelope bytes...
 ```
 
-Lua 只能保证两个 `XADD` 在 Redis 内执行期间不可交错，不保证 Redis 与 MySQL 的跨系统事务，也不保证脚本异常时两个写入全部回滚。脚本成功后服务端返回 `LINK_ACCEPTED`，状态为 `QUEUED`，只表示两条任务都已进入 Redis，不表示关系表已经完成写入。
+Lua 只能保证两个 `XADD` 在 Redis 内执行期间不可交错，不保证 Redis 与 MySQL 的跨系统事务，也不保证脚本异常时两个写入全部回滚。Lua 负责双队列原子入队，不负责生成单例业务顺序版本。脚本成功后服务端返回 `LINK_ACCEPTED`，状态为 `QUEUED`，只表示两条任务都已进入 Redis，不表示关系表已经完成写入。
 
 WebSocket Link 更新使用同一个 UUID 关联 `eventId`、`clientUpdateId` 和 `operationId`，以支持重试和幂等。两条队列分别消费、确认和删除；Binding Consumer 失败时保留任务并重试。
 
-如果使用 Redis Cluster，两个 Stream Key 必须通过共同 hash tag 放到同一个 hash slot；当前方案默认两条 Stream 使用同一个 Redis 实例。RabbitMQ Topic Exchange 暂不替换现有 Redis 更新链路。
+如果使用 Redis Cluster，两个 Stream Key 以及后续版本计数器必须通过共同 hash tag 放到同一个 hash slot；当前方案默认两条 Stream 使用同一个 Redis 实例。RabbitMQ Topic Exchange 暂不替换现有 Redis 更新链路。
 
 ## 2. Rebind 接口
 
