@@ -2,6 +2,8 @@ package com.jacolp.document.application.close;
 
 import com.jacolp.document.application.compact.DocumentCompactResult;
 import com.jacolp.document.application.compact.DocumentCompactService;
+import com.jacolp.document.application.binding.DocumentBindingConsumeResult;
+import com.jacolp.document.application.binding.DocumentBindingConsumer;
 import com.jacolp.document.application.flush.DocumentFlushLogResult;
 import com.jacolp.document.application.flush.DocumentFlushLogService;
 import com.jacolp.document.infrastructure.redis.DocumentRedisRepository;
@@ -22,6 +24,7 @@ public class DocumentCloseService {
     private final DocumentSessionPresenceRegistry presenceRegistry;
     private final DocumentRoomManager roomManager;
     private final DocumentFlushLogService flushLogService;
+    private final DocumentBindingConsumer bindingConsumer;
     private final DocumentCompactService compactService;
     private final DocumentRedisRepository documentRedisRepository;
     private final DocumentMetrics metrics;
@@ -31,9 +34,10 @@ public class DocumentCloseService {
                                 DocumentSessionPresenceRegistry presenceRegistry,
                                 DocumentRoomManager roomManager,
                                 DocumentFlushLogService flushLogService,
+                                DocumentBindingConsumer bindingConsumer,
                                 DocumentCompactService compactService,
                                 DocumentRedisRepository documentRedisRepository) {
-        this(lifecycleService, presenceRegistry, roomManager, flushLogService, compactService,
+        this(lifecycleService, presenceRegistry, roomManager, flushLogService, bindingConsumer, compactService,
                 documentRedisRepository, DocumentMetrics.noop());
     }
 
@@ -43,12 +47,14 @@ public class DocumentCloseService {
                                 DocumentSessionPresenceRegistry presenceRegistry,
                                 DocumentRoomManager roomManager,
                                 DocumentFlushLogService flushLogService,
+                                DocumentBindingConsumer bindingConsumer,
                                 DocumentCompactService compactService,
                                 DocumentRedisRepository documentRedisRepository, DocumentMetrics metrics) {
         this.lifecycleService = Objects.requireNonNull(lifecycleService, "lifecycleService must not be null");
         this.presenceRegistry = Objects.requireNonNull(presenceRegistry, "presenceRegistry must not be null");
         this.roomManager = Objects.requireNonNull(roomManager, "roomManager must not be null");
         this.flushLogService = Objects.requireNonNull(flushLogService, "flushLogService must not be null");
+        this.bindingConsumer = Objects.requireNonNull(bindingConsumer, "bindingConsumer must not be null");
         this.compactService = Objects.requireNonNull(compactService, "compactService must not be null");
         this.documentRedisRepository = Objects.requireNonNull(documentRedisRepository, "documentRedisRepository must not be null");
         this.metrics = Objects.requireNonNull(metrics, "metrics must not be null");
@@ -65,7 +71,9 @@ public class DocumentCloseService {
             compactAll(documentId);
             // 持久化可能耗时较长，因此再次检查：若期间有会话重连，就撤销本次关闭，
             // 保留 Room 与 Redis 运行时状态供新会话继续使用。
-            if (!closeGuardsPass(documentId, closeToken) || !roomManager.hasNoLocalSessions(documentId)) {
+            if (!closeGuardsPass(documentId, closeToken) || !roomManager.hasNoLocalSessions(documentId)
+                    || documentRedisRepository.pendingUpdateCount(documentId) > 0
+                    || documentRedisRepository.pendingBindingCount(documentId) > 0) {
                 return new DocumentCloseResult(documentId, DocumentCloseResult.Status.REOPENED);
             }
             roomManager.removeIfEmpty(documentId);
@@ -86,10 +94,12 @@ public class DocumentCloseService {
     /** 持续刷盘直到 Redis Stream 不再有待处理更新。 */
     private void flushAll(long documentId) {
         DocumentFlushLogResult result;
+        DocumentBindingConsumeResult bindingResult;
         do {
             result = flushLogService.flush(documentId);
-            // 一批可能受数量和字节上限约束，只有处理数为零才说明 Redis Stream 已经清空。
-        } while (result.processedCount() > 0);
+            // 固定先推进 updates，再用同一个单例消费者排空 Binding；任一 Stream 还有处理量都继续轮询。
+            bindingResult = bindingConsumer.drain(documentId);
+        } while (result.processedCount() > 0 || bindingResult.processedCount() > 0);
     }
 
     /** 持续压缩直到当前持久化日志没有可合并内容。 */

@@ -58,6 +58,7 @@ public class DocumentMetrics {
         Gauge.builder("document_ws_sessions", websocketSessions, AtomicInteger::get).register(meterRegistry);
         Gauge.builder("document_active_rooms", activeRooms, AtomicInteger::get).register(meterRegistry);
         Gauge.builder("document_pending_update_count", this, ignored -> pendingUpdateCount()).register(meterRegistry);
+        Gauge.builder("document_pending_binding_count", this, ignored -> pendingBindingCount()).register(meterRegistry);
         Gauge.builder("document_unmerged_op_count", this, ignored -> unmergedOpCount()).register(meterRegistry);
     }
 
@@ -150,6 +151,16 @@ public class DocumentMetrics {
         if (meterRegistry == null) return Double.NaN;
         try {
             return activeDocumentIds().stream().mapToLong(documentRedisRepository::pendingUpdateCount).sum();
+        } catch (RuntimeException ignored) {
+            return Double.NaN;
+        }
+    }
+
+    /** 汇总当前活跃 Room 对应的 Redis 待投影 Binding 数量。 */
+    private double pendingBindingCount() {
+        if (meterRegistry == null) return Double.NaN;
+        try {
+            return activeDocumentIds().stream().mapToLong(documentRedisRepository::pendingBindingCount).sum();
         } catch (RuntimeException ignored) {
             return Double.NaN;
         }

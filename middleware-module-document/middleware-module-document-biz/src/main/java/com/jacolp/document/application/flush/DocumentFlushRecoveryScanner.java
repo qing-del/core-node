@@ -31,7 +31,9 @@ public class DocumentFlushRecoveryScanner {
     public void scanAndReschedule() {
         for (var meta : documentRedisRepository.findRoomMetas()) {
             try {
-                if (documentRedisRepository.pendingUpdateCount(meta.documentId()) > 0) {
+                boolean hasPendingUpdates = documentRedisRepository.pendingUpdateCount(meta.documentId()) > 0;
+                boolean hasPendingBindings = documentRedisRepository.pendingBindingCount(meta.documentId()) > 0;
+                if (hasPendingUpdates || hasPendingBindings) {
                     schedulePublisher.scheduleFlushLog(meta.documentId());
                 }
             } catch (RuntimeException exception) {

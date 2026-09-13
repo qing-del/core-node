@@ -25,6 +25,7 @@ class DocumentMetricsTest {
         DocumentOpLogMapper operationLogs = mock(DocumentOpLogMapper.class);
         when(redis.findRoomMetas()).thenReturn(List.of(new DocumentRoomMeta(7L, 42L, false, null, 0L, 42L)));
         when(redis.pendingUpdateCount(7L)).thenReturn(2L);
+        when(redis.pendingBindingCount(7L)).thenReturn(4L);
         when(documents.selectById(7L)).thenReturn(document(7L, 42L));
         when(operationLogs.countByDocumentIdAfterId(7L, 0L)).thenReturn(3L);
         DocumentMetrics metrics = new DocumentMetrics(registry, redis, documents, operationLogs);
@@ -44,6 +45,7 @@ class DocumentMetricsTest {
         assertThat(registry.get("document_ws_sessions").gauge().value()).isEqualTo(2D);
         assertThat(registry.get("document_active_rooms").gauge().value()).isEqualTo(1D);
         assertThat(registry.get("document_pending_update_count").gauge().value()).isEqualTo(2D);
+        assertThat(registry.get("document_pending_binding_count").gauge().value()).isEqualTo(4D);
         assertThat(registry.get("document_unmerged_op_count").gauge().value()).isEqualTo(3D);
         assertThat(registry.get("document_update_accept_total").counter().count()).isEqualTo(1D);
         assertThat(registry.get("document_update_reject_total").counter().count()).isEqualTo(1D);

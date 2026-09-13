@@ -21,10 +21,26 @@ class DocumentFlushRecoveryScannerTest {
                 new DocumentRoomMeta(8L, 42L, false, null, 1L, 42L)));
         when(redisRepository.pendingUpdateCount(7L)).thenReturn(1L);
         when(redisRepository.pendingUpdateCount(8L)).thenReturn(0L);
+        when(redisRepository.pendingBindingCount(7L)).thenReturn(0L);
+        when(redisRepository.pendingBindingCount(8L)).thenReturn(0L);
 
         new DocumentFlushRecoveryScanner(redisRepository, publisher).scanAndReschedule();
 
         verify(publisher).scheduleFlushLog(7L);
         verify(publisher, org.mockito.Mockito.never()).scheduleFlushLog(8L);
+    }
+
+    @Test
+    void reschedulesRoomWhenOnlyBindingStreamStillContainsEntries() {
+        DocumentRedisRepository redisRepository = mock(DocumentRedisRepository.class);
+        DocumentSchedulePublisher publisher = mock(DocumentSchedulePublisher.class);
+        when(redisRepository.findRoomMetas()).thenReturn(List.of(
+                new DocumentRoomMeta(7L, 42L, false, null, 1L, 42L)));
+        when(redisRepository.pendingUpdateCount(7L)).thenReturn(0L);
+        when(redisRepository.pendingBindingCount(7L)).thenReturn(2L);
+
+        new DocumentFlushRecoveryScanner(redisRepository, publisher).scanAndReschedule();
+
+        verify(publisher).scheduleFlushLog(7L);
     }
 }

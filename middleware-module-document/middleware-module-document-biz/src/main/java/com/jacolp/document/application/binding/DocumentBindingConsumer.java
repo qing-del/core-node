@@ -56,7 +56,7 @@ public class DocumentBindingConsumer {
     }
 
     /** 持续排空指定文档的 Binding Stream，直到本次观察范围没有剩余消息。 */
-    public DocumentBindingConsumeResult drain(long documentId) {
+    public synchronized DocumentBindingConsumeResult drain(long documentId) {
         requirePositive(documentId);
         int batchSize = Math.max(1, properties.getFlushLog().getBatchSize());
         int processedCount = 0;
