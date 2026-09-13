@@ -9,6 +9,8 @@ import com.jacolp.document.application.close.DocumentRoomLifecycleService;
 import com.jacolp.document.config.DocumentProperties;
 import com.jacolp.document.infrastructure.persistence.dataobject.DocumentDO;
 import com.jacolp.document.infrastructure.persistence.mapper.DocumentMapper;
+import com.jacolp.document.infrastructure.redis.DocumentLinkAcceptedRedisOperations;
+import com.jacolp.document.infrastructure.redis.DocumentPendingBinding;
 import com.jacolp.document.infrastructure.redis.DocumentPendingUpdate;
 import com.jacolp.document.infrastructure.redis.DocumentRedisRepository;
 import com.jacolp.document.infrastructure.redis.DocumentRoomMeta;
@@ -25,7 +27,10 @@ import com.jacolp.document.websocket.protocol.DocumentWsCodec;
 import com.jacolp.document.websocket.protocol.DocumentWsControlMessage;
 import com.jacolp.document.websocket.protocol.DocumentWsControlType;
 import com.jacolp.document.websocket.protocol.DocumentWsFrameType;
+import com.jacolp.document.websocket.protocol.DocumentLinkCodec;
+import com.jacolp.document.websocket.protocol.DocumentLinkPayload;
 import com.jacolp.document.websocket.protocol.DocumentWsProtocolException;
+import com.jacolp.document.websocket.protocol.DocumentWsLinkAcceptedMessage;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -160,9 +165,9 @@ public class DocumentWebSocketHandler extends AbstractWebSocketHandler {
     }
 
     /**
-     * 只接受客户端 CLIENT_UPDATE 和 AWARENESS 二进制帧，其他类型直接拒绝。
+     * 只接受客户端 CLIENT_UPDATE、LINK 和 AWARENESS 二进制帧，其他类型直接拒绝。
      *
-     * <p>CLIENT_UPDATE 会写入 Redis 并进入异步刷盘；AWARENESS 仅在当前 Room 内转发，
+     * <p>CLIENT_UPDATE/LINK 会写入 Redis 并进入异步刷盘；AWARENESS 仅在当前 Room 内转发，
      * 不产生持久化副作用。</p>
      */
     @Override
@@ -177,15 +182,21 @@ public class DocumentWebSocketHandler extends AbstractWebSocketHandler {
         }
 
         try {
-            // CLIENT_UPDATE 进入持久化链路，AWARENESS 只做实时广播；快照/历史帧只能由服务端发送。
+            // CLIENT_UPDATE/LINK 进入持久化链路，AWARENESS 只做实时广播；快照/历史帧只能由服务端发送。
             if (frame.type() == DocumentWsFrameType.CLIENT_UPDATE) {
                 acceptClientUpdate(session, frame);
+            } else if (frame.type() == DocumentWsFrameType.LINK) {
+                acceptLinkUpdate(session, frame);
             } else if (frame.type() == DocumentWsFrameType.AWARENESS) {
                 broadcastAwareness(session, frame);
             } else {
                 metrics.recordUpdateRejected();
                 sendError(session, frame.eventId(), "DOCUMENT_PROTOCOL_ERROR", "binary frame type is not accepted from clients");
             }
+        } catch (DocumentWsProtocolException exception) {
+            // LINK 的固定 Envelope 校验失败时不能落入通用更新失败，否则客户端无法区分协议错误。
+            metrics.recordUpdateRejected();
+            sendError(session, frame.eventId(), protocolErrorCode(exception), exception.getMessage());
         } catch (DocumentRoomAccessException exception) {
             // 未 JOIN、未完成 bootstrap 或无全局写 scope 均属于资源访问失败。
             metrics.recordUpdateRejected();
@@ -303,6 +314,47 @@ public class DocumentWebSocketHandler extends AbstractWebSocketHandler {
         metrics.recordUpdateAccepted();
         List<DocumentSessionContext> removedSessions = room.broadcast(codec.encodeBinary(new DocumentWsBinaryFrame(
                 DocumentWsFrameType.CRDT_UPDATE, frame.eventId(), frame.payload())), session.getId());
+        cleanupRemovedSessions(room, removedSessions);
+        scheduleFlushLog(room.documentId());
+    }
+
+    /** 校验 LINK Envelope，原子写入双 Stream，再发送专用 ACK 并广播 raw Yjs update。 */
+    private void acceptLinkUpdate(WebSocketSession session, DocumentWsBinaryFrame frame) {
+        if (rejectInvalidClientPayload(session, frame, "LINK payload")) return;
+        DocumentLinkPayload link = DocumentLinkCodec.decode(frame.payload());
+        DocumentRoom room = requireActiveRoom(session);
+        DocumentSessionContext context = room.requireSession(session.getId());
+
+        CurrentPrincipal principal = DocumentWebSocketHandshakeInterceptor.requirePrincipal(session.getAttributes());
+        if (context.userId() != principal.userId() || !context.canWrite()) {
+            throw new DocumentRoomAccessException("document session does not have write permission");
+        }
+        // LINK 仍然是文档内容变更，沿用普通 CLIENT_UPDATE 的全局写 scope 和最新 ACL 复核。
+        if (!PermissionScopeMatcher.grants(principal.scopes(), "document:write")) {
+            throw new DocumentRoomAccessException("document session does not have document:write scope");
+        }
+        DocumentAccess access = accessService.requireWrite(room.documentId(), principal.userId());
+        context.updateAccess(access);
+        long now = System.currentTimeMillis();
+        DocumentLinkAcceptedRedisOperations operations = documentRedisRepository.appendLinkPendingUpdate(
+                new DocumentPendingUpdate(room.documentId(), link.rawYjsUpdate(), frame.eventId().toString(),
+                        principal.userId(), principal.clientId(), now),
+                new DocumentPendingBinding(room.documentId(), link.envelope().encodeBody()));
+
+        // Redis 双 Stream 原子入队后沿用普通更新的 active 条件，避免被撤销的文档继续确认新的变更。
+        int modified = documentMapper.updateLastModificationIfActive(room.documentId(), principal.userId(),
+                LocalDateTime.now(APPLICATION_ZONE), principal.userId());
+        if (modified != 1) {
+            throw new DocumentRoomAccessException("document no longer accepts LINK updates");
+        }
+        saveRoomMeta(room.documentId(), room.ownerUserId(), principal.userId(), now);
+        if (!sendLinkAccepted(room.requireSession(session.getId()).session(), room.documentId(), frame, operations)) {
+            // LINK 的 ACK 是发送者确认点；ACK 发送失败时不向其他会话广播，避免出现无法确认的实时变更。
+            return;
+        }
+        metrics.recordUpdateAccepted();
+        List<DocumentSessionContext> removedSessions = room.broadcast(codec.encodeBinary(new DocumentWsBinaryFrame(
+                DocumentWsFrameType.CRDT_UPDATE, frame.eventId(), link.rawYjsUpdate())), session.getId());
         cleanupRemovedSessions(room, removedSessions);
         scheduleFlushLog(room.documentId());
     }
@@ -457,6 +509,21 @@ public class DocumentWebSocketHandler extends AbstractWebSocketHandler {
             return true;
         } catch (IOException | RuntimeException exception) {
             // 底层会话可能以 IOException 或已关闭/超限状态抛出运行时异常，两者都必须释放 Room 颜色。
+            leaveSession(session);
+            return false;
+        }
+    }
+
+    /** 发送 LINK 专用确认；发送失败只清理会话，不回滚已经入队的 Redis 数据。 */
+    private boolean sendLinkAccepted(WebSocketSession session, long documentId, DocumentWsBinaryFrame frame,
+                                     DocumentLinkAcceptedRedisOperations operations) {
+        try {
+            session.sendMessage(codec.encodeLinkAccepted(new DocumentWsLinkAcceptedMessage(protocolVersion(),
+                    DocumentWsControlType.LINK_ACCEPTED, frame.eventId(), documentId, frame.eventId(),
+                    operations.updatesRedisOpId(), operations.bindingRedisOpId(), "QUEUED")));
+            return true;
+        } catch (IOException | RuntimeException exception) {
+            // 双 Stream 已经成功写入，ACK 失败时保留 At-Least-Once 数据并释放不可用会话。
             leaveSession(session);
             return false;
         }

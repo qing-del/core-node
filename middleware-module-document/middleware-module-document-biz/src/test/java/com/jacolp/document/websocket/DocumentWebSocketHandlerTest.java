@@ -23,6 +23,8 @@ import com.jacolp.document.config.DocumentProperties;
 import com.jacolp.document.enums.DocumentPermission;
 import com.jacolp.document.infrastructure.persistence.dataobject.DocumentDO;
 import com.jacolp.document.infrastructure.persistence.mapper.DocumentMapper;
+import com.jacolp.document.infrastructure.redis.DocumentLinkAcceptedRedisOperations;
+import com.jacolp.document.infrastructure.redis.DocumentPendingBinding;
 import com.jacolp.document.infrastructure.redis.DocumentPendingUpdate;
 import com.jacolp.document.infrastructure.redis.DocumentRedisRepository;
 import com.jacolp.document.messaging.DocumentSchedulePublisher;
@@ -34,6 +36,10 @@ import com.jacolp.document.websocket.protocol.DocumentWsCodec;
 import com.jacolp.document.websocket.protocol.DocumentWsControlMessage;
 import com.jacolp.document.websocket.protocol.DocumentWsControlType;
 import com.jacolp.document.websocket.protocol.DocumentWsFrameType;
+import com.jacolp.document.websocket.protocol.DocumentBindingCommandType;
+import com.jacolp.document.websocket.protocol.DocumentBindingEnvelope;
+import com.jacolp.document.websocket.protocol.DocumentBindingTargetType;
+import com.jacolp.document.websocket.protocol.DocumentLinkCodec;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -109,6 +115,114 @@ class DocumentWebSocketHandlerTest {
         assertThat(ack.clientUpdateId()).isEqualTo(updateId);
         assertThat(ack.redisOpId()).isEqualTo("123-0");
         verify(schedulePublisher).scheduleFlushLog(7L);
+    }
+
+    @Test
+    void acceptsLinkAfterAtomicEnqueueAndBroadcastsOnlyRawYjsUpdate() throws Exception {
+        DocumentProperties properties = new DocumentProperties();
+        DocumentWsCodec codec = new DocumentWsCodec(new ObjectMapper(), properties);
+        DocumentMapper documentMapper = mock(DocumentMapper.class);
+        DocumentAccessService accessService = mock(DocumentAccessService.class);
+        DocumentRedisRepository redisRepository = mock(DocumentRedisRepository.class);
+        DocumentBootstrapService bootstrapService = mock(DocumentBootstrapService.class);
+        DocumentSchedulePublisher schedulePublisher = mock(DocumentSchedulePublisher.class);
+        DocumentSessionPresenceRegistry presenceRegistry = mock(DocumentSessionPresenceRegistry.class);
+        DocumentRoomLifecycleService lifecycleService = mock(DocumentRoomLifecycleService.class);
+        DocumentDO document = document(7L, 42L);
+        DocumentAccess ownerAccess = access(document, DocumentPermission.WRITE, true);
+        DocumentAccess collaboratorAccess = access(document, DocumentPermission.READ, false);
+        when(accessService.requireRead(7L, 42L)).thenReturn(ownerAccess);
+        when(accessService.requireRead(7L, 43L)).thenReturn(collaboratorAccess);
+        when(accessService.requireWrite(7L, 42L)).thenReturn(ownerAccess);
+        when(redisRepository.findRoomMeta(7L)).thenReturn(Optional.empty());
+        when(redisRepository.appendLinkPendingUpdate(any(), any()))
+                .thenReturn(new DocumentLinkAcceptedRedisOperations("200-0", "201-0"));
+        when(documentMapper.updateLastModificationIfActive(eq(7L), eq(42L), any(LocalDateTime.class), eq(42L)))
+                .thenReturn(1);
+
+        DocumentWebSocketHandler handler = handler(codec, documentMapper, accessService, redisRepository,
+                bootstrapService, schedulePublisher, presenceRegistry, lifecycleService, properties);
+        WebSocketSession owner = session("session-link-owner", principal(42L, "document:write"));
+        WebSocketSession collaborator = session("session-link-collaborator", principal(43L, "document:read"));
+        handler.handleMessage(owner, codec.encodeControl(joinControl(7L, 3101L)));
+        handler.handleMessage(collaborator, codec.encodeControl(joinControl(7L, 3102L)));
+
+        UUID linkId = UUID.randomUUID();
+        byte[] rawYjsUpdate = new byte[] {0, -1, 1, 127};
+        DocumentBindingEnvelope envelope = new DocumentBindingEnvelope(1, DocumentBindingCommandType.BIND,
+                UUID.randomUUID(), DocumentBindingTargetType.DOCUMENT, 99L);
+        handler.handleMessage(owner, codec.encodeBinary(new DocumentWsBinaryFrame(DocumentWsFrameType.LINK, linkId,
+                DocumentLinkCodec.encode(envelope, rawYjsUpdate))));
+
+        ArgumentCaptor<DocumentPendingUpdate> pendingUpdate = ArgumentCaptor.forClass(DocumentPendingUpdate.class);
+        ArgumentCaptor<DocumentPendingBinding> pendingBinding = ArgumentCaptor.forClass(DocumentPendingBinding.class);
+        verify(redisRepository).appendLinkPendingUpdate(pendingUpdate.capture(), pendingBinding.capture());
+        assertThat(pendingUpdate.getValue().updateData()).containsExactly(rawYjsUpdate);
+        assertThat(pendingUpdate.getValue().clientUpdateId()).isEqualTo(linkId.toString());
+        assertThat(pendingBinding.getValue().documentId()).isEqualTo(7L);
+        assertThat(pendingBinding.getValue().envelopeData()).containsExactly(envelope.encodeBody());
+
+        ArgumentCaptor<WebSocketMessage<?>> ownerMessages = ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(owner, times(4)).sendMessage(ownerMessages.capture());
+        String acceptedJson = ((TextMessage) ownerMessages.getAllValues().getLast()).getPayload();
+        assertThat(acceptedJson).contains("\"type\":\"LINK_ACCEPTED\"")
+                .contains("\"documentId\":7")
+                .contains("\"clientUpdateId\":\"" + linkId + "\"")
+                .contains("\"updatesRedisOpId\":\"200-0\"")
+                .contains("\"bindingRedisOpId\":\"201-0\"")
+                .contains("\"status\":\"QUEUED\"");
+
+        ArgumentCaptor<WebSocketMessage<?>> collaboratorMessages = ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(collaborator, times(4)).sendMessage(collaboratorMessages.capture());
+        DocumentWsBinaryFrame broadcast = codec.decodeBinary(
+                (BinaryMessage) collaboratorMessages.getAllValues().getLast());
+        assertThat(broadcast.type()).isEqualTo(DocumentWsFrameType.CRDT_UPDATE);
+        assertThat(broadcast.eventId()).isEqualTo(linkId);
+        assertThat(broadcast.payload()).containsExactly(rawYjsUpdate);
+        verify(schedulePublisher).scheduleFlushLog(7L);
+    }
+
+    @Test
+    void linkRedisFailureDoesNotAckOrBroadcast() throws Exception {
+        WebSocketTestFixture fixture = websocketFixture(128);
+        joinOwnerAndCollaborator(fixture);
+        UUID linkId = UUID.randomUUID();
+        DocumentBindingEnvelope envelope = new DocumentBindingEnvelope(1, DocumentBindingCommandType.UNBIND,
+                UUID.randomUUID(), DocumentBindingTargetType.DOCUMENT, 99L);
+        when(fixture.redisRepository().appendLinkPendingUpdate(any(), any()))
+                .thenThrow(new IllegalStateException("redis unavailable"));
+
+        fixture.handler().handleMessage(fixture.owner(), fixture.codec().encodeBinary(new DocumentWsBinaryFrame(
+                DocumentWsFrameType.LINK, linkId, DocumentLinkCodec.encode(envelope, new byte[] {1, 2, 3}))));
+
+        ArgumentCaptor<WebSocketMessage<?>> ownerMessages = ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(fixture.owner(), times(4)).sendMessage(ownerMessages.capture());
+        DocumentWsControlMessage error = fixture.codec().decodeControl(
+                (TextMessage) ownerMessages.getAllValues().getLast());
+        assertThat(error.type()).isEqualTo(DocumentWsControlType.ERROR);
+        assertThat(error.code()).isEqualTo("DOCUMENT_UPDATE_ACCEPT_FAILED");
+        verify(fixture.collaborator(), times(3)).sendMessage(any(WebSocketMessage.class));
+        verify(fixture.documentMapper(), never()).updateLastModificationIfActive(anyLong(), anyLong(), any(), anyLong());
+        verify(fixture.schedulePublisher(), never()).scheduleFlushLog(anyLong());
+    }
+
+    @Test
+    void malformedLinkEnvelopeIsRejectedAsProtocolError() throws Exception {
+        WebSocketTestFixture fixture = websocketFixture(128);
+        joinOwner(fixture);
+        UUID linkId = UUID.randomUUID();
+
+        fixture.handler().handleMessage(fixture.owner(), fixture.codec().encodeBinary(new DocumentWsBinaryFrame(
+                DocumentWsFrameType.LINK, linkId, new byte[] {0, 0, 0, 27, 1})));
+
+        ArgumentCaptor<WebSocketMessage<?>> ownerMessages = ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(fixture.owner(), times(3)).sendMessage(ownerMessages.capture());
+        DocumentWsControlMessage error = fixture.codec().decodeControl(
+                (TextMessage) ownerMessages.getAllValues().getLast());
+        assertThat(error.type()).isEqualTo(DocumentWsControlType.ERROR);
+        assertThat(error.requestId()).isEqualTo(linkId);
+        assertThat(error.code()).isEqualTo("DOCUMENT_PROTOCOL_ERROR");
+        verify(fixture.redisRepository(), never()).appendLinkPendingUpdate(any(), any());
     }
 
     @Test
@@ -733,7 +847,8 @@ class DocumentWebSocketHandlerTest {
         WebSocketSession owner = session("session-awareness-validation-owner", principal(42L, "document:write"));
         WebSocketSession collaborator = session("session-awareness-validation-collaborator",
                 principal(43L, "document:read"));
-        return new WebSocketTestFixture(handler, codec, roomManager, redisRepository, owner, collaborator);
+        return new WebSocketTestFixture(handler, codec, roomManager, redisRepository, documentMapper,
+                schedulePublisher, owner, collaborator);
     }
 
     private static void joinOwner(WebSocketTestFixture fixture) throws Exception {
@@ -799,6 +914,7 @@ class DocumentWebSocketHandlerTest {
 
     private record WebSocketTestFixture(DocumentWebSocketHandler handler, DocumentWsCodec codec,
                                         DocumentRoomManager roomManager, DocumentRedisRepository redisRepository,
+                                        DocumentMapper documentMapper, DocumentSchedulePublisher schedulePublisher,
                                         WebSocketSession owner, WebSocketSession collaborator) {
     }
 }
