@@ -7,6 +7,7 @@ public enum DocumentWsControlType {
     SYNC_COMPLETE,
     LEAVE_DOCUMENT,
     UPDATE_ACCEPTED,
+    LINK_ACCEPTED,
     AWARENESS_META,
     ERROR,
     PING,

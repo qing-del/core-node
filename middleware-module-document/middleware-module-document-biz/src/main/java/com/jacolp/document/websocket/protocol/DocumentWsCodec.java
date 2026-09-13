@@ -96,6 +96,20 @@ public class DocumentWsCodec {
         }
     }
 
+    /** 编码 LINK 双 Stream 原子入队后的专用确认消息。 */
+    public TextMessage encodeLinkAccepted(DocumentWsLinkAcceptedMessage accepted) {
+        Objects.requireNonNull(accepted, "LINK accepted message must not be null");
+        if (accepted.protocolVersion() != properties.getWebsocket().getProtocolVersion()) {
+            throw new DocumentWsProtocolException("unsupported document WebSocket protocol version: "
+                    + accepted.protocolVersion());
+        }
+        try {
+            return new TextMessage(objectMapper.writeValueAsString(accepted));
+        } catch (JsonProcessingException exception) {
+            throw new DocumentWsProtocolException("could not encode document LINK accepted message", exception);
+        }
+    }
+
     /** 解码并校验 Awareness 元数据控制帧，供协议测试和后续消费方复用。 */
     public DocumentWsAwarenessMeta decodeAwarenessMeta(TextMessage message) {
         try {

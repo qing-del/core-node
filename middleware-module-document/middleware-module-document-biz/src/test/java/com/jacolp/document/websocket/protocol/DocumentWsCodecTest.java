@@ -28,6 +28,19 @@ class DocumentWsCodecTest {
     }
 
     @Test
+    void roundTripsTheLinkOuterHeaderWithoutInterpretingItsPayload() {
+        UUID eventId = UUID.fromString("123e4567-e89b-12d3-a456-426614174001");
+        byte[] linkPayload = new byte[] {0, 0, 0, 27, 1, 1, 7};
+
+        DocumentWsBinaryFrame decoded = codec.decodeBinary(codec.encodeBinary(
+                new DocumentWsBinaryFrame(DocumentWsFrameType.LINK, eventId, linkPayload)));
+
+        assertThat(decoded.type()).isEqualTo(DocumentWsFrameType.LINK);
+        assertThat(decoded.eventId()).isEqualTo(eventId);
+        assertThat(decoded.payload()).containsExactly(linkPayload);
+    }
+
+    @Test
     void rejectsShortUnknownAndIncompatibleBinaryFrames() {
         assertThatThrownBy(() -> codec.decodeBinary(ByteBuffer.allocate(DocumentWsCodec.BINARY_HEADER_BYTES - 1)))
                 .isInstanceOf(DocumentWsProtocolException.class);
@@ -78,5 +91,15 @@ class DocumentWsCodecTest {
                 DocumentWsControlType.AWARENESS_META, requestId, DocumentWsAwarenessAction.REMOVE,
                 7L, 123456789L, "session-a", null, null, null))).action())
                 .isEqualTo(DocumentWsAwarenessAction.REMOVE);
+    }
+
+    @Test
+    void encodesLinkAcceptedWithBothRedisOperationIds() {
+        UUID requestId = UUID.fromString("123e4567-e89b-12d3-a456-426614174010");
+        TextMessage encoded = codec.encodeLinkAccepted(new DocumentWsLinkAcceptedMessage(
+                1, DocumentWsControlType.LINK_ACCEPTED, requestId, 7L, requestId,
+                "100-0", "200-0", "QUEUED"));
+
+        assertThat(encoded.getPayload()).contains("LINK_ACCEPTED", "updatesRedisOpId", "bindingRedisOpId", "QUEUED");
     }
 }

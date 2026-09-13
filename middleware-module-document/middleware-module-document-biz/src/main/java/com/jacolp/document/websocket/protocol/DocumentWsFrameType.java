@@ -8,7 +8,8 @@ public enum DocumentWsFrameType {
     CRDT_UPDATE(0x02),
     SNAPSHOT_STATE(0x03),
     BOOTSTRAP_UPDATE(0x04),
-    AWARENESS(0x05);
+    AWARENESS(0x05),
+    LINK(0x06);
 
     private final int wireValue;
 
