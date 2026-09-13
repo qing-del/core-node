@@ -177,6 +177,16 @@ test('round trips BIND and UNBIND envelopes and keeps targetId as bigint', () =>
     assert.deepEqual(decoded, envelope)
     assert.equal(decoded.targetId, 42n)
   }
+  assert.equal(hex(encodeDocumentLinkPayload(
+    createEnvelope(DocumentBindingCommandType.UNBIND),
+    new Uint8Array([0x01, 0x02])
+  )),
+  '0000001b'
+    + '0102'
+    + '123e4567e89b12d3a456426614174000'
+    + '01'
+    + '000000000000002a'
+    + '0102')
   assert.equal(DOCUMENT_BINDING_ENVELOPE_BODY_BYTES, 27)
 })
 
@@ -260,15 +270,44 @@ test('routes a LinkIntent-origin Yjs transaction through a LINK frame', () => {
   }
 })
 
-test('replays a pending LINK unchanged after reconnect and clears it on LINK_ACCEPTED', () => {
+test('keeps an ordinary Yjs transaction on CLIENT_UPDATE', () => {
   const environment = installFakeBrowser()
-  const { scheduler } = environment
   const ydoc = new Y.Doc()
   const client = new DocumentCollaborationClient({
     documentId: 42,
     accessToken: 'test-token',
     ydoc,
     canWrite: true
+  })
+
+  try {
+    client.connect()
+    const socket = FakeWebSocket.instances[0]
+    assert.ok(socket)
+    socket.open()
+    socket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+    ydoc.getMap('content').set('ordinary', true)
+
+    const update = findFrame(socket, DocumentWsFrameType.CLIENT_UPDATE)
+    assert.ok(update.payload.byteLength > 0)
+    assert.equal(countFrames(socket, DocumentWsFrameType.LINK), 0)
+  } finally {
+    client.dispose()
+    environment.restore()
+  }
+})
+
+test('replays a pending LINK unchanged after reconnect and clears it on LINK_ACCEPTED', () => {
+  const environment = installFakeBrowser()
+  const { scheduler } = environment
+  const ydoc = new Y.Doc()
+  const acceptedClientUpdateIds: string[] = []
+  const client = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc,
+    canWrite: true,
+    onLinkAccepted: message => acceptedClientUpdateIds.push(message.clientUpdateId)
   })
 
   try {
@@ -305,6 +344,7 @@ test('replays a pending LINK unchanged after reconnect and clears it on LINK_ACC
       bindingRedisOpId: '1756080000001-0',
       status: 'QUEUED'
     })))
+    assert.deepEqual(acceptedClientUpdateIds, [original.eventId])
 
     secondSocket.onclose?.()
     scheduler.runNext()
@@ -361,6 +401,91 @@ test('retains pending LINK while read-only and resumes it when write access retu
     assert.deepEqual(replayed.payload, original.payload)
   } finally {
     client.dispose()
+    environment.restore()
+  }
+})
+
+test('applies a raw CRDT_UPDATE broadcast without echoing it as a local update', () => {
+  const environment = installFakeBrowser()
+  const ydoc = new Y.Doc()
+  const client = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc,
+    canWrite: true
+  })
+
+  try {
+    client.connect()
+    const socket = FakeWebSocket.instances[0]
+    assert.ok(socket)
+    socket.open()
+    socket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+
+    const remoteDoc = new Y.Doc()
+    remoteDoc.getMap('content').set('remote', 'broadcast')
+    const remoteUpdate = Y.encodeStateAsUpdate(remoteDoc)
+    socket.receive(encodeDocumentWsFrame(
+      DocumentWsFrameType.CRDT_UPDATE,
+      '123e4567-e89b-12d3-a456-426614174001',
+      remoteUpdate
+    ))
+
+    assert.equal(ydoc.getMap('content').get('remote'), 'broadcast')
+    assert.equal(countFrames(socket, DocumentWsFrameType.CLIENT_UPDATE), 0)
+    assert.equal(countFrames(socket, DocumentWsFrameType.LINK), 0)
+  } finally {
+    client.dispose()
+    environment.restore()
+  }
+})
+
+test('forwards the raw portion of one BIND LINK to a second client as CRDT_UPDATE', () => {
+  const environment = installFakeBrowser()
+  const firstDoc = new Y.Doc()
+  const secondDoc = new Y.Doc()
+  const firstClient = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc: firstDoc,
+    canWrite: true
+  })
+  const secondClient = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc: secondDoc,
+    canWrite: true
+  })
+
+  try {
+    firstClient.connect()
+    secondClient.connect()
+    const firstSocket = FakeWebSocket.instances[0]
+    const secondSocket = FakeWebSocket.instances[1]
+    assert.ok(firstSocket)
+    assert.ok(secondSocket)
+    firstSocket.open()
+    secondSocket.open()
+    firstSocket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+    secondSocket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+
+    firstDoc.transact(() => {
+      firstDoc.getMap('content').set('bound', 'document-42')
+    }, createBindIntent(REF_ID, 42))
+    const link = findFrame(firstSocket, DocumentWsFrameType.LINK)
+    const { rawYjsUpdate } = decodeDocumentLinkPayload(link.payload)
+    secondSocket.receive(encodeDocumentWsFrame(
+      DocumentWsFrameType.CRDT_UPDATE,
+      '123e4567-e89b-12d3-a456-426614174001',
+      rawYjsUpdate
+    ))
+
+    assert.equal(secondDoc.getMap('content').get('bound'), 'document-42')
+    assert.equal(countFrames(secondSocket, DocumentWsFrameType.CLIENT_UPDATE), 0)
+    assert.equal(countFrames(secondSocket, DocumentWsFrameType.LINK), 0)
+  } finally {
+    firstClient.dispose()
+    secondClient.dispose()
     environment.restore()
   }
 })
