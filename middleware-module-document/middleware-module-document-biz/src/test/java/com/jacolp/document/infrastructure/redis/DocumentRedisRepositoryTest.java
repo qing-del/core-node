@@ -4,6 +4,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,6 +16,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.stream.ByteRecord;
@@ -110,6 +112,32 @@ class DocumentRedisRepositoryTest {
     }
 
     @Test
+    void shouldAtomicallyAppendLinkUpdateAndBindingEnvelopeToTwoStreams() {
+        doReturn(List.of("1234-0".getBytes(UTF_8), "1235-0".getBytes(UTF_8)))
+                .when(connection).eval(any(byte[].class), org.mockito.ArgumentMatchers.eq(ReturnType.MULTI),
+                        org.mockito.ArgumentMatchers.eq(2), any(byte[][].class));
+        byte[] updateData = {(byte) 0x80, 0, 1};
+        byte[] envelope = {0, 0, 0, 27, 1, 1, 7};
+
+        DocumentLinkAcceptedRedisOperations accepted = repository.appendLinkPendingUpdate(
+                new DocumentPendingUpdate(18L, updateData, "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        9L, "USER", 1234L),
+                new DocumentPendingBinding(18L, envelope));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<byte[][]> arguments = ArgumentCaptor.forClass(byte[][].class);
+        verify(connection).eval(any(byte[].class), org.mockito.ArgumentMatchers.eq(ReturnType.MULTI),
+                org.mockito.ArgumentMatchers.eq(2), arguments.capture());
+        byte[][] keysAndArguments = arguments.getValue();
+        assertThat(string(keysAndArguments[0])).isEqualTo("document:updates:18");
+        assertThat(string(keysAndArguments[1])).isEqualTo("document:bindings:18");
+        assertThat(keysAndArguments[2]).containsExactly(updateData);
+        assertThat(keysAndArguments[7]).containsExactly(envelope);
+        assertThat(accepted).isEqualTo(new DocumentLinkAcceptedRedisOperations("1234-0", "1235-0"));
+        verify(connection).close();
+    }
+
+    @Test
     void shouldReadAndDeletePendingUpdatesByRedisStreamId() {
         byte[] key = "document:updates:18".getBytes(UTF_8);
         ByteRecord record = StreamRecords.rawBytes(bytesMap(Map.of(
@@ -134,9 +162,30 @@ class DocumentRedisRepositoryTest {
     }
 
     @Test
+    void shouldReadAndDeletePendingBindingsByRedisStreamId() {
+        byte[] key = "document:bindings:18".getBytes(UTF_8);
+        ByteRecord record = StreamRecords.rawBytes(bytesMap(Map.of(
+                        "envelope", "\u0001\u0002\u0003")))
+                .withStreamKey(key)
+                .withId(RecordId.of("1234-0"));
+        when(connection.xRange(any(byte[].class), any(), any())).thenReturn(List.of(record));
+        when(connection.xDel(any(byte[].class), any(RecordId[].class))).thenReturn(1L);
+
+        List<StoredDocumentPendingBinding> bindings = repository.readPendingBindings(18L, 10);
+        long deleted = repository.deletePendingBindings(18L, List.of("1234-0"));
+
+        assertThat(bindings).hasSize(1);
+        assertThat(bindings.getFirst().redisOpId()).isEqualTo("1234-0");
+        assertThat(bindings.getFirst().binding().envelopeData()).containsExactly(1, 2, 3);
+        assertThat(deleted).isEqualTo(1L);
+        verify(connection, times(2)).close();
+    }
+
+    @Test
     void shouldExposeStableDocumentKeyNames() {
         assertThat(DocumentRedisRepository.roomMetaKey(18L)).isEqualTo("document:meta:18");
         assertThat(DocumentRedisRepository.pendingUpdatesKey(18L)).isEqualTo("document:updates:18");
+        assertThat(DocumentRedisRepository.pendingBindingsKey(18L)).isEqualTo("document:bindings:18");
     }
 
     @Test
@@ -176,7 +225,8 @@ class DocumentRedisRepositoryTest {
 
         verify(connection).set(any(byte[].class), any(byte[].class), any(), any());
         verify(connection).del("document:presence:18:node:session".getBytes(UTF_8));
-        verify(connection).del("document:meta:18".getBytes(UTF_8), "document:updates:18".getBytes(UTF_8));
+        verify(connection).del("document:meta:18".getBytes(UTF_8), "document:updates:18".getBytes(UTF_8),
+                "document:bindings:18".getBytes(UTF_8));
     }
 
     private static Map<byte[], byte[]> bytesMap(Map<String, String> values) {

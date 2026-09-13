@@ -9,10 +9,12 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.Limit;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.ReturnType;
 import org.springframework.data.redis.connection.RedisStringCommands.SetOption;
 import org.springframework.data.redis.connection.stream.ByteRecord;
 import org.springframework.data.redis.connection.stream.RecordId;
@@ -31,6 +33,7 @@ import org.springframework.stereotype.Repository;
 @ConditionalOnProperty(prefix = "jacolp.document", name = "enabled", havingValue = "true")
 public class DocumentRedisRepository {
 
+    private static final byte[] LINK_APPEND_SCRIPT = loadLinkAppendScript();
     private static final byte[] FIELD_DOCUMENT_ID = bytes("documentId");
     private static final byte[] FIELD_OWNER_USER_ID = bytes("ownerUserId");
     private static final byte[] FIELD_LEGACY_TEAM_ID = bytes("teamId");
@@ -43,6 +46,7 @@ public class DocumentRedisRepository {
     private static final byte[] FIELD_OPERATOR_ID = bytes("operatorId");
     private static final byte[] FIELD_OPERATOR_TYPE = bytes("operatorType");
     private static final byte[] FIELD_CREATED_AT = bytes("createdAt");
+    private static final byte[] FIELD_ENVELOPE = bytes("envelope");
 
     private final RedisConnectionFactory redisConnectionFactory;
 
@@ -120,6 +124,42 @@ public class DocumentRedisRepository {
         }
     }
 
+    /** 使用一次 Lua EVAL 原子写入 updates Stream 和 Binding Stream，并返回两个 Stream ID。 */
+    public DocumentLinkAcceptedRedisOperations appendLinkPendingUpdate(DocumentPendingUpdate update,
+                                                                       DocumentPendingBinding binding) {
+        if (update == null || binding == null) {
+            throw new IllegalArgumentException("LINK pending update and binding must not be null");
+        }
+        if (update.documentId() != binding.documentId()) {
+            throw new IllegalArgumentException("LINK update and binding document IDs must match");
+        }
+        List<byte[]> arguments = List.of(
+                update.updateData(),
+                bytes(update.clientUpdateId()),
+                update.operatorId() == null ? bytes("") : bytes(update.operatorId()),
+                bytes(update.operatorType()),
+                bytes(update.createdAt()),
+                binding.envelopeData());
+        byte[][] keysAndArguments = new byte[2 + arguments.size()][];
+        keysAndArguments[0] = bytes(pendingUpdatesKey(update.documentId()));
+        keysAndArguments[1] = bytes(pendingBindingsKey(binding.documentId()));
+        for (int index = 0; index < arguments.size(); index++) {
+            keysAndArguments[index + 2] = arguments.get(index);
+        }
+
+        try (RedisConnection connection = redisConnectionFactory.getConnection()) {
+            @SuppressWarnings("unchecked")
+            List<Object> result = (List<Object>) connection.eval(LINK_APPEND_SCRIPT, ReturnType.MULTI, 2,
+                    keysAndArguments);
+            if (result == null || result.size() != 2) {
+                throw new IllegalStateException("Redis LINK append did not return two Stream IDs");
+            }
+            return new DocumentLinkAcceptedRedisOperations(
+                    redisResultString(result.get(0), "updates Stream"),
+                    redisResultString(result.get(1), "binding Stream"));
+        }
+    }
+
     /** 按 Stream 顺序读取指定数量的待刷盘更新，并为每条记录保留其 Redis ID。 */
     public List<StoredDocumentPendingUpdate> readPendingUpdates(long documentId, int maxCount) {
         requirePositive(documentId, "documentId");
@@ -142,6 +182,26 @@ public class DocumentRedisRepository {
         }
     }
 
+    /** 按 Binding Stream 顺序读取指定数量的待投影 Envelope。 */
+    public List<StoredDocumentPendingBinding> readPendingBindings(long documentId, int maxCount) {
+        requirePositive(documentId, "documentId");
+        if (maxCount <= 0) {
+            throw new IllegalArgumentException("maxCount must be positive");
+        }
+        try (RedisConnection connection = redisConnectionFactory.getConnection()) {
+            List<ByteRecord> records = connection.xRange(
+                    bytes(pendingBindingsKey(documentId)), Range.unbounded(), Limit.limit().count(maxCount));
+            if (records == null || records.isEmpty()) {
+                return List.of();
+            }
+            List<StoredDocumentPendingBinding> bindings = new ArrayList<>(records.size());
+            for (ByteRecord record : records) {
+                bindings.add(toStoredPendingBinding(documentId, record));
+            }
+            return List.copyOf(bindings);
+        }
+    }
+
     /** 删除已成功持久化的 Stream 条目；空 ID 集合不触碰 Redis。 */
     public long deletePendingUpdates(long documentId, Collection<String> redisOpIds) {
         requirePositive(documentId, "documentId");
@@ -157,11 +217,34 @@ public class DocumentRedisRepository {
         }
     }
 
+    /** 删除已成功写入关系投影的 Binding Stream 条目。 */
+    public long deletePendingBindings(long documentId, Collection<String> redisOpIds) {
+        requirePositive(documentId, "documentId");
+        if (redisOpIds == null || redisOpIds.isEmpty()) {
+            return 0;
+        }
+        RecordId[] recordIds = redisOpIds.stream().map(DocumentRedisRepository::toRecordId)
+                .toArray(RecordId[]::new);
+        try (RedisConnection connection = redisConnectionFactory.getConnection()) {
+            Long deleted = connection.xDel(bytes(pendingBindingsKey(documentId)), recordIds);
+            return deleted == null ? 0 : deleted;
+        }
+    }
+
     /** 返回一个文档当前尚未落库的 Redis Stream 条目数。 */
     public long pendingUpdateCount(long documentId) {
         requirePositive(documentId, "documentId");
         try (RedisConnection connection = redisConnectionFactory.getConnection()) {
             Long count = connection.xLen(bytes(pendingUpdatesKey(documentId)));
+            return count == null ? 0L : count;
+        }
+    }
+
+    /** 返回一个文档当前尚未投影的 Binding Stream 条目数。 */
+    public long pendingBindingCount(long documentId) {
+        requirePositive(documentId, "documentId");
+        try (RedisConnection connection = redisConnectionFactory.getConnection()) {
+            Long count = connection.xLen(bytes(pendingBindingsKey(documentId)));
             return count == null ? 0L : count;
         }
     }
@@ -227,7 +310,8 @@ public class DocumentRedisRepository {
     public void deleteRoomRuntime(long documentId) {
         requirePositive(documentId, "documentId");
         try (RedisConnection connection = redisConnectionFactory.getConnection()) {
-            connection.del(bytes(roomMetaKey(documentId)), bytes(pendingUpdatesKey(documentId)));
+            connection.del(bytes(roomMetaKey(documentId)), bytes(pendingUpdatesKey(documentId)),
+                    bytes(pendingBindingsKey(documentId)));
         }
     }
 
@@ -241,6 +325,12 @@ public class DocumentRedisRepository {
     static String pendingUpdatesKey(long documentId) {
         requirePositive(documentId, "documentId");
         return "document:updates:" + documentId;
+    }
+
+    /** 生成文档 Binding Stream 的稳定 Redis key。 */
+    static String pendingBindingsKey(long documentId) {
+        requirePositive(documentId, "documentId");
+        return "document:bindings:" + documentId;
     }
 
     /** 将 Redis Hash 字段恢复为经过领域校验的 Room 元数据。 */
@@ -287,6 +377,20 @@ public class DocumentRedisRepository {
                 parseOptionalLong(fields, "operatorId"),
                 requiredString(fields, "operatorType"),
                 parseRequiredLong(fields, "createdAt")));
+    }
+
+    /** 将 Binding Stream 记录恢复为带 Stream ID 的 Envelope。 */
+    private static StoredDocumentPendingBinding toStoredPendingBinding(long documentId, ByteRecord record) {
+        if (record.getId() == null || record.getId().getValue() == null || record.getId().getValue().isBlank()) {
+            throw new IllegalStateException("Redis Binding Stream record is missing its ID");
+        }
+        Map<String, byte[]> fields = stringFields(record.getValue());
+        byte[] envelope = fields.get("envelope");
+        if (envelope == null || envelope.length == 0) {
+            throw new IllegalStateException("Redis Binding Stream record is missing a binary envelope");
+        }
+        return new StoredDocumentPendingBinding(record.getId().getValue(),
+                new DocumentPendingBinding(documentId, envelope));
     }
 
     /** 仅把字段名转成字符串，保留字段值的原始字节。 */
@@ -370,5 +474,30 @@ public class DocumentRedisRepository {
     /** 将 Redis 非正文字段按 UTF-8 解码。 */
     private static String string(byte[] value) {
         return new String(value, StandardCharsets.UTF_8);
+    }
+
+    /** 将 Lua MULTI 返回的 Redis bulk string安全转换为 Stream ID。 */
+    private static String redisResultString(Object value, String fieldName) {
+        String result;
+        if (value instanceof byte[] bytes) {
+            result = string(bytes);
+        } else if (value instanceof String text) {
+            result = text;
+        } else {
+            result = null;
+        }
+        if (result == null || result.isBlank()) {
+            throw new IllegalStateException("Redis LINK append returned an invalid " + fieldName + " ID");
+        }
+        return result;
+    }
+
+    /** 从 classpath 加载原子双 Stream 入队脚本；脚本缺失属于启动期配置错误。 */
+    private static byte[] loadLinkAppendScript() {
+        try (var input = new ClassPathResource("lua/document_link_append.lua").getInputStream()) {
+            return input.readAllBytes();
+        } catch (Exception exception) {
+            throw new ExceptionInInitializerError(exception);
+        }
     }
 }
