@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.jacolp.document.infrastructure.persistence.mapper.DocumentRelationMapper">
+
+    <resultMap id="DocumentRelationMap"
+               type="com.jacolp.document.infrastructure.persistence.dataobject.DocumentRelationDO">
+        <id column="source_document_id" property="sourceDocumentId"/>
+        <id column="ref_id" property="refId"/>
+        <result column="resource_node_id" property="resourceNodeId"/>
+        <result column="is_delete" property="deleted"/>
+    </resultMap>
+
+    <select id="selectBySourceDocumentIdAndRefId" resultMap="DocumentRelationMap">
+        SELECT source_document_id, ref_id, resource_node_id, is_delete
+        FROM biz_document_relation
+        WHERE source_document_id = #{sourceDocumentId}
+          AND ref_id = #{refId}
+    </select>
+
+    <insert id="insert" parameterType="com.jacolp.document.infrastructure.persistence.dataobject.DocumentRelationDO">
+        INSERT INTO biz_document_relation
+            (source_document_id, ref_id, resource_node_id, is_delete)
+        VALUES
+            (#{sourceDocumentId}, #{refId}, #{resourceNodeId}, #{deleted})
+    </insert>
+
+    <update id="activateBySourceDocumentIdAndRefId">
+        UPDATE biz_document_relation
+        SET resource_node_id = #{resourceNodeId},
+            is_delete = 0
+        WHERE source_document_id = #{sourceDocumentId}
+          AND ref_id = #{refId}
+    </update>
+
+    <update id="softDeleteBySourceDocumentIdAndRefId">
+        UPDATE biz_document_relation
+        SET is_delete = 1
+        WHERE source_document_id = #{sourceDocumentId}
+          AND ref_id = #{refId}
+          AND is_delete = 0
+    </update>
+</mapper>

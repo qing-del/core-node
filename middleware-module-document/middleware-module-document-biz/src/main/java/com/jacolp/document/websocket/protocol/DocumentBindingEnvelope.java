@@ -49,4 +49,18 @@ public record DocumentBindingEnvelope(
         body.putLong(targetId);
         return body.array();
     }
+
+    /** 从 Binding Stream 中保存的固定 27 字节 body 解码并执行同一套字段校验。 */
+    public static DocumentBindingEnvelope decodeBody(byte[] body) {
+        if (body == null || body.length != BODY_BYTES) {
+            throw new DocumentWsProtocolException("document LINK binding envelope body must be exactly 27 bytes");
+        }
+        ByteBuffer source = ByteBuffer.wrap(body).asReadOnlyBuffer().order(ByteOrder.BIG_ENDIAN);
+        return new DocumentBindingEnvelope(
+                Byte.toUnsignedInt(source.get()),
+                DocumentBindingCommandType.fromWireValue(Byte.toUnsignedInt(source.get())),
+                new UUID(source.getLong(), source.getLong()),
+                DocumentBindingTargetType.fromWireValue(Byte.toUnsignedInt(source.get())),
+                source.getLong());
+    }
 }

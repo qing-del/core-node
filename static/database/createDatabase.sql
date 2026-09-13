@@ -689,3 +689,19 @@ CREATE TABLE `document_op_log` (
     UNIQUE KEY `uk_document_client_update` (`document_id`, `client_update_id`),
     KEY `idx_document_log` (`document_id`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作文档已可靠转存的Yjs增量日志';
+
+-- 文档 LINK Binding 投影：不建立跨模块外键，也不为资源节点目标增加唯一约束。
+CREATE TABLE `biz_resource_node` (
+    `id`            bigint       NOT NULL AUTO_INCREMENT COMMENT '跨模块资源节点ID',
+    `resource_type` varchar(32)  NOT NULL COMMENT '资源类型，例如 DOCUMENT',
+    `target_id`     bigint       NOT NULL COMMENT '目标资源在所属业务模块中的ID',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档正文引用的跨模块资源节点';
+
+CREATE TABLE `biz_document_relation` (
+    `source_document_id` bigint      NOT NULL COMMENT '源文档ID',
+    `ref_id`             char(36)    NOT NULL COMMENT '正文resourceReference稳定UUID',
+    `resource_node_id`   bigint      NOT NULL COMMENT '当前资源节点ID',
+    `is_delete`          tinyint     NOT NULL DEFAULT 0 COMMENT '软删除标记(0:有效,1:删除)',
+    PRIMARY KEY (`source_document_id`, `ref_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档与正文资源引用节点的关系投影';

@@ -34,6 +34,14 @@ class DocumentLinkCodecTest {
     }
 
     @Test
+    void decodesTheBindingStreamBodyWithoutAnOuterLengthPrefix() {
+        DocumentBindingEnvelope envelope = new DocumentBindingEnvelope(
+                1, DocumentBindingCommandType.BIND, REF_ID, DocumentBindingTargetType.DOCUMENT, 42L);
+
+        assertThat(DocumentBindingEnvelope.decodeBody(envelope.encodeBody())).isEqualTo(envelope);
+    }
+
+    @Test
     void rejectsMalformedEnvelopeAndEmptyUpdate() {
         DocumentBindingEnvelope envelope = new DocumentBindingEnvelope(
                 1, DocumentBindingCommandType.BIND, REF_ID, DocumentBindingTargetType.DOCUMENT, 42L);

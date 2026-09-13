@@ -3,7 +3,6 @@ package com.jacolp.document.websocket.protocol;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
-import java.util.UUID;
 
 /** 解析 LINK payload 的固定 Envelope，同时保持 raw Yjs update 完全透明。 */
 public final class DocumentLinkCodec {
@@ -42,13 +41,9 @@ public final class DocumentLinkCodec {
             throw new DocumentWsProtocolException("document LINK payload does not contain a raw Yjs update");
         }
 
-        int schemaVersion = Byte.toUnsignedInt(source.get());
-        DocumentBindingCommandType commandType = DocumentBindingCommandType.fromWireValue(Byte.toUnsignedInt(source.get()));
-        UUID refId = new UUID(source.getLong(), source.getLong());
-        DocumentBindingTargetType targetType = DocumentBindingTargetType.fromWireValue(Byte.toUnsignedInt(source.get()));
-        long targetId = source.getLong();
-        DocumentBindingEnvelope envelope = new DocumentBindingEnvelope(
-                schemaVersion, commandType, refId, targetType, targetId);
+        byte[] envelopeBody = new byte[envelopeLength];
+        source.get(envelopeBody);
+        DocumentBindingEnvelope envelope = DocumentBindingEnvelope.decodeBody(envelopeBody);
 
         byte[] rawYjsUpdate = new byte[source.remaining()];
         source.get(rawYjsUpdate);
