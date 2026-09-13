@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import * as Y from 'yjs'
 import {
+  createDocumentWsControl,
   decodeDocumentBindingEnvelope,
   decodeDocumentLinkPayload,
   decodeDocumentWsFrame,
@@ -15,9 +17,107 @@ import {
   parseDocumentWsControl,
   parseDocumentWsLinkAccepted
 } from '../src/collaboration/documentProtocol.ts'
+import { DocumentCollaborationClient } from '../src/collaboration/DocumentCollaborationClient.ts'
+import type { DocumentLinkIntent } from '../src/collaboration/documentProtocol.ts'
 
 const EVENT_ID = '550e8400-e29b-41d4-a716-446655440000'
 const REF_ID = '123e4567-e89b-12d3-a456-426614174000'
+
+type SentData = string | ArrayBuffer
+
+class FakeWebSocket {
+  static readonly OPEN = 1
+  static readonly instances: FakeWebSocket[] = []
+
+  readonly sent: SentData[] = []
+  readonly url: string
+  readonly protocols: string[]
+  readyState = 0
+  binaryType = ''
+  onopen: (() => void) | null = null
+  onmessage: ((event: MessageEvent<string | ArrayBuffer>) => void) | null = null
+  onerror: (() => void) | null = null
+  onclose: (() => void) | null = null
+
+  constructor(url: string, protocols: string[]) {
+    this.url = url
+    this.protocols = protocols
+    FakeWebSocket.instances.push(this)
+  }
+
+  send(data: SentData): void {
+    this.sent.push(data)
+  }
+
+  close(): void {
+    this.readyState = 3
+    this.onclose?.()
+  }
+
+  open(): void {
+    this.readyState = FakeWebSocket.OPEN
+    this.onopen?.()
+  }
+
+  receive(data: SentData): void {
+    this.onmessage?.({ data } as MessageEvent<string | ArrayBuffer>)
+  }
+}
+
+class FakeTimerScheduler {
+  private nextId = 1
+  private readonly tasks = new Map<number, () => void>()
+
+  readonly setTimeout = (callback: () => void): number => {
+    const id = this.nextId
+    this.nextId += 1
+    this.tasks.set(id, callback)
+    return id
+  }
+
+  readonly clearTimeout = (id: number): void => {
+    this.tasks.delete(id)
+  }
+
+  runNext(): void {
+    const next = this.tasks.keys().next()
+    assert.equal(next.done, false)
+    const id = next.value as number
+    const callback = this.tasks.get(id)
+    assert.ok(callback)
+    this.tasks.delete(id)
+    callback()
+  }
+}
+
+function installFakeBrowser(): {
+  scheduler: FakeTimerScheduler
+  restore: () => void
+} {
+  const globalObject = globalThis as typeof globalThis & {
+    WebSocket: typeof WebSocket
+    window: Window & typeof globalThis
+  }
+  const originalWebSocket = globalObject.WebSocket
+  const originalWindow = globalObject.window
+  const scheduler = new FakeTimerScheduler()
+  FakeWebSocket.instances.length = 0
+  globalObject.WebSocket = FakeWebSocket as unknown as typeof WebSocket
+  globalObject.window = {
+    location: { protocol: 'http:', host: 'localhost' },
+    setTimeout: scheduler.setTimeout,
+    clearTimeout: scheduler.clearTimeout
+  } as unknown as Window & typeof globalThis
+
+  return {
+    scheduler,
+    restore: () => {
+      globalObject.WebSocket = originalWebSocket
+      globalObject.window = originalWindow
+      FakeWebSocket.instances.length = 0
+    }
+  }
+}
 
 function createEnvelope(commandType: DocumentBindingCommandType = DocumentBindingCommandType.BIND) {
   return {
@@ -108,3 +208,161 @@ test('strictly parses LINK_ACCEPTED and checks the current document', () => {
   const invalidStatus = { ...control, status: 'PERSISTED' }
   assert.throws(() => parseDocumentWsLinkAccepted(invalidStatus), /QUEUED/)
 })
+
+test('routes a LinkIntent-origin Yjs transaction through a LINK frame', () => {
+  const environment = installFakeBrowser()
+  const ydoc = new Y.Doc()
+  const client = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc,
+    canWrite: true
+  })
+  const intent: DocumentLinkIntent = {
+    kind: 'document-link-intent',
+    ...createEnvelope()
+  }
+
+  try {
+    client.connect()
+    const socket = FakeWebSocket.instances[0]
+    assert.ok(socket)
+    socket.open()
+    socket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+
+    ydoc.transact(() => {
+      ydoc.getMap('content').set('linked', true)
+    }, intent)
+
+    const frame = findFrame(socket, DocumentWsFrameType.LINK)
+    const decoded = decodeDocumentLinkPayload(frame.payload)
+    assert.deepEqual(decoded.envelope, createEnvelope())
+    assert.ok(decoded.rawYjsUpdate.byteLength > 0)
+    assert.equal(countFrames(socket, DocumentWsFrameType.CLIENT_UPDATE), 0)
+  } finally {
+    client.dispose()
+    environment.restore()
+  }
+})
+
+test('replays a pending LINK unchanged after reconnect and clears it on LINK_ACCEPTED', () => {
+  const environment = installFakeBrowser()
+  const { scheduler } = environment
+  const ydoc = new Y.Doc()
+  const client = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc,
+    canWrite: true
+  })
+
+  try {
+    client.connect()
+    const firstSocket = FakeWebSocket.instances[0]
+    assert.ok(firstSocket)
+    firstSocket.open()
+    firstSocket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+
+    const intent: DocumentLinkIntent = {
+      kind: 'document-link-intent',
+      ...createEnvelope(DocumentBindingCommandType.UNBIND)
+    }
+    ydoc.transact(() => {
+      ydoc.getMap('content').set('unbound', true)
+    }, intent)
+    const original = findFrame(firstSocket, DocumentWsFrameType.LINK)
+
+    firstSocket.onclose?.()
+    scheduler.runNext()
+    const secondSocket = FakeWebSocket.instances[1]
+    assert.ok(secondSocket)
+    secondSocket.open()
+    secondSocket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+    const replayed = findFrame(secondSocket, DocumentWsFrameType.LINK)
+    assert.equal(replayed.eventId, original.eventId)
+    assert.deepEqual(replayed.payload, original.payload)
+
+    secondSocket.receive(JSON.stringify(createDocumentWsControl('LINK_ACCEPTED', {
+      documentId: 42,
+      requestId: original.eventId,
+      clientUpdateId: original.eventId,
+      updatesRedisOpId: '1756080000000-0',
+      bindingRedisOpId: '1756080000001-0',
+      status: 'QUEUED'
+    })))
+
+    secondSocket.onclose?.()
+    scheduler.runNext()
+    const thirdSocket = FakeWebSocket.instances[2]
+    assert.ok(thirdSocket)
+    thirdSocket.open()
+    thirdSocket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+    assert.equal(countFrames(thirdSocket, DocumentWsFrameType.LINK), 0)
+  } finally {
+    client.dispose()
+    environment.restore()
+  }
+})
+
+test('retains pending LINK while read-only and resumes it when write access returns', () => {
+  const environment = installFakeBrowser()
+  const { scheduler } = environment
+  const ydoc = new Y.Doc()
+  const client = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc,
+    canWrite: true
+  })
+
+  try {
+    client.connect()
+    const firstSocket = FakeWebSocket.instances[0]
+    assert.ok(firstSocket)
+    firstSocket.open()
+    firstSocket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+
+    const intent: DocumentLinkIntent = {
+      kind: 'document-link-intent',
+      ...createEnvelope()
+    }
+    ydoc.transact(() => {
+      ydoc.getMap('content').set('paused', true)
+    }, intent)
+    const original = findFrame(firstSocket, DocumentWsFrameType.LINK)
+
+    client.setWriteEnabled(false)
+    firstSocket.onclose?.()
+    scheduler.runNext()
+    const secondSocket = FakeWebSocket.instances[1]
+    assert.ok(secondSocket)
+    secondSocket.open()
+    secondSocket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+    assert.equal(countFrames(secondSocket, DocumentWsFrameType.LINK), 0)
+
+    client.setWriteEnabled(true)
+    const replayed = findFrame(secondSocket, DocumentWsFrameType.LINK)
+    assert.equal(replayed.eventId, original.eventId)
+    assert.deepEqual(replayed.payload, original.payload)
+  } finally {
+    client.dispose()
+    environment.restore()
+  }
+})
+
+function findFrame(socket: FakeWebSocket, type: DocumentWsFrameType) {
+  const frame = socket.sent
+    .filter((data): data is ArrayBuffer => data instanceof ArrayBuffer)
+    .map(data => decodeDocumentWsFrame(data))
+    .find(value => value.type === type)
+  assert.ok(frame)
+  return frame
+}
+
+function countFrames(socket: FakeWebSocket, type: DocumentWsFrameType): number {
+  return socket.sent
+    .filter((data): data is ArrayBuffer => data instanceof ArrayBuffer)
+    .map(data => decodeDocumentWsFrame(data))
+    .filter(value => value.type === type)
+    .length
+}

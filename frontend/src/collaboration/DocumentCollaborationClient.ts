@@ -10,11 +10,16 @@ import {
   createDocumentWsControl,
   createDocumentWsRequestId,
   decodeDocumentWsFrame,
+  encodeDocumentLinkPayload,
   encodeDocumentWsFrame,
+  isDocumentLinkIntent,
   parseDocumentWsAwarenessMeta,
   parseDocumentWsControl,
+  parseDocumentWsLinkAccepted,
+  type DocumentBindingEnvelope,
   type DocumentWsAwarenessMeta,
-  type DocumentWsControlMessage
+  type DocumentWsControlMessage,
+  type DocumentWsLinkAcceptedMessage
 } from './documentProtocol.ts'
 import {
   createDocumentAwarenessProvider,
@@ -116,18 +121,33 @@ export interface DocumentCollaborationClientOptions {
     event: DocumentAwarenessSessionEvent,
     sessions: ReadonlyMap<number, DocumentAwarenessSessionMetadata>
   ) => void
+  /** LINK 已原子进入 Redis 双 Stream 后的确认回调；不代表 MySQL 投影已完成。 */
+  onLinkAccepted?: (message: DocumentWsLinkAcceptedMessage) => void
   /** 收到文档拒绝或不存在错误时通知页面层。 */
   onAccessError?: (error: DocumentCollaborationError) => void
   /** 自动重连前重新读取文档元数据，刷新当前页面的资源级权限。 */
   onBeforeReconnect?: () => Promise<DocumentReconnectAccessResult>
 }
 
-interface PendingUpdate {
-  /** 客户端为该更新生成的幂等 UUID；example: {@code '550e8400-e29b-41d4-a716-446655440000'} */
-  id: string
-  /** 尚未收到 UPDATE_ACCEPTED 的 Yjs 二进制更新；example: {@code new Uint8Array([1, 2, 127])} */
-  payload: Uint8Array
-}
+type PendingUpdate =
+  | {
+      /** 客户端为普通更新生成的关联 UUID。 */
+      id: string
+      /** 重连时必须保留的原始 frame type。 */
+      frameType: DocumentWsFrameType.CLIENT_UPDATE
+      /** 尚未收到 UPDATE_ACCEPTED 的 raw Yjs update。 */
+      payload: Uint8Array
+    }
+  | {
+      /** LINK 外层 eventId，同时也是服务端 ACK 的 clientUpdateId。 */
+      id: string
+      /** 重连时必须保留的原始 frame type。 */
+      frameType: DocumentWsFrameType.LINK
+      /** 尚未收到 LINK_ACCEPTED 的 raw Yjs update。 */
+      payload: Uint8Array
+      /** 与 raw Yjs 同一 transaction 关联的固定 Envelope。 */
+      envelope: DocumentBindingEnvelope
+    }
 
 interface PendingBootstrapFrame {
   /** Bootstrap 帧类型；当前只允许 SNAPSHOT_STATE 或 BOOTSTRAP_UPDATE。 */
@@ -175,6 +195,8 @@ export class DocumentCollaborationClient {
     event: DocumentAwarenessSessionEvent,
     sessions: ReadonlyMap<number, DocumentAwarenessSessionMetadata>
   ) => void
+  /** LINK 已原子进入 Redis 双 Stream 后的确认回调；不代表 MySQL 投影已完成。 */
+  private readonly onLinkAccepted?: (message: DocumentWsLinkAcceptedMessage) => void
   /** 文档资源拒绝回调，由页面层切换到不可用状态。 */
   private readonly onAccessError?: (error: DocumentCollaborationError) => void
   /** 自动重连前的权限刷新回调。 */
@@ -214,6 +236,7 @@ export class DocumentCollaborationClient {
     this.onStateChange = options.onStateChange
     this.onAwarenessChange = options.onAwarenessChange
     this.onAwarenessSessionChange = options.onAwarenessSessionChange
+    this.onLinkAccepted = options.onLinkAccepted
     this.onAccessError = options.onAccessError
     this.onBeforeReconnect = options.onBeforeReconnect
     this.writable = options.canWrite
@@ -228,10 +251,13 @@ export class DocumentCollaborationClient {
     this.awareness.on('change', this.handleAwarenessChange)
   }
 
-  /** 刷新正文写权限；降权时丢弃尚未获得服务端确认的本地更新。 */
+  /** 刷新正文写权限；降权时保留未确认更新并暂停发送，恢复后继续重放。 */
   setWriteEnabled(enabled: boolean): void {
+    const wasWritable = this.writable
     this.writable = enabled
-    if (!enabled) this.pendingUpdates.clear()
+    if (!wasWritable && enabled && this.synchronized) {
+      this.pendingUpdates.forEach(update => this.sendPendingUpdate(update))
+    }
   }
 
   /** 建立 bearer 子协议连接并发送 JOIN；已连接或已销毁时保持幂等。 */
@@ -345,14 +371,32 @@ export class DocumentCollaborationClient {
     this.setState('closed')
   }
 
-  /** 将本地 Yjs 更新放入待确认队列，直到服务端返回 UPDATE_ACCEPTED。 */
+  /** 将本地 Yjs 更新放入待确认队列，直到服务端返回对应 ACK。 */
   private readonly handleDocumentUpdate = (update: Uint8Array, origin: unknown): void => {
     if (origin === REMOTE_UPDATE_ORIGIN || this.disposed || !this.writable) return
     /** 用于服务端确认和本地重连重放的客户端更新 UUID。 */
     const id = createDocumentWsRequestId()
+    const linkIntent = isDocumentLinkIntent(origin) ? origin : null
     // 每个本地 Yjs 变更都会保留到服务端发送 UPDATE_ACCEPTED；因此 bootstrap 期间的变更
     // 能在首次 SYNC_COMPLETE 和后续重连后继续发送。
-    this.pendingUpdates.set(id, { id, payload: update.slice() })
+    this.pendingUpdates.set(id, linkIntent
+      ? {
+          id,
+          frameType: DocumentWsFrameType.LINK,
+          payload: update.slice(),
+          envelope: {
+            schemaVersion: linkIntent.schemaVersion,
+            commandType: linkIntent.commandType,
+            refId: linkIntent.refId,
+            targetType: linkIntent.targetType,
+            targetId: linkIntent.targetId
+          }
+        }
+      : {
+          id,
+          frameType: DocumentWsFrameType.CLIENT_UPDATE,
+          payload: update.slice()
+        })
     if (this.synchronized) this.sendPendingUpdate(this.pendingUpdates.get(id)!)
   }
 
@@ -407,6 +451,12 @@ export class DocumentCollaborationClient {
       case 'UPDATE_ACCEPTED':
         if (control.clientUpdateId) this.pendingUpdates.delete(control.clientUpdateId)
         break
+      case 'LINK_ACCEPTED': {
+        const accepted = parseDocumentWsLinkAccepted(control, this.documentId)
+        this.pendingUpdates.delete(accepted.clientUpdateId)
+        this.onLinkAccepted?.(accepted)
+        break
+      }
       case 'PING':
         this.sendControl(createDocumentWsControl('PONG', {
           requestId: control.requestId,
@@ -653,6 +703,14 @@ export class DocumentCollaborationClient {
   /** 发送一条仍在等待服务端确认的客户端更新。 */
   private sendPendingUpdate(update: PendingUpdate): void {
     if (!this.writable || !this.synchronized || !this.isSocketOpen()) return
+    if (update.frameType === DocumentWsFrameType.LINK) {
+      this.socket!.send(encodeDocumentWsFrame(
+        DocumentWsFrameType.LINK,
+        update.id,
+        encodeDocumentLinkPayload(update.envelope, update.payload)
+      ))
+      return
+    }
     this.socket!.send(encodeDocumentWsFrame(DocumentWsFrameType.CLIENT_UPDATE, update.id, update.payload))
   }
 

@@ -210,6 +210,20 @@ function assertDocumentBindingEnvelope(envelope: DocumentBindingEnvelope): void 
   }
 }
 
+/** 判断 Yjs transaction origin 是否是已校验的文档 LinkIntent。 */
+export function isDocumentLinkIntent(value: unknown): value is DocumentLinkIntent {
+  if (!value || typeof value !== 'object'
+      || (value as { kind?: unknown }).kind !== 'document-link-intent') {
+    return false
+  }
+  try {
+    assertDocumentBindingEnvelope(value as DocumentBindingEnvelope)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** 编码固定 27 字节 BindingEnvelope body；所有数值均使用大端序。 */
 export function encodeDocumentBindingEnvelope(envelope: DocumentBindingEnvelope): Uint8Array {
   assertDocumentBindingEnvelope(envelope)
