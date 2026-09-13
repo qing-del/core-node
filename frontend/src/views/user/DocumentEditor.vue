@@ -5,6 +5,7 @@ import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import * as Y from 'yjs'
+import { NodeSelection } from '@tiptap/pm/state'
 import {
   ArrowLeft,
   Bold,
@@ -16,10 +17,12 @@ import {
   Link2,
   List,
   Loader2,
+  RefreshCw,
   Redo2,
   Save,
   Trash2,
   Undo2,
+  Unlink2,
   UserPlus,
   Users,
   X
@@ -31,6 +34,7 @@ import {
   type DocumentAccessMetadata,
   type DocumentPermission,
   type DocumentShareLink,
+  type DocumentMetadata,
   type DocumentUserAuthorization
 } from '@/api/documents'
 import {
@@ -40,9 +44,19 @@ import {
   type DocumentReconnectAccessResult
 } from '@/collaboration/DocumentCollaborationClient'
 import { createDocumentCollaborationCaret } from '@/collaboration/DocumentCollaborationCaret'
-import { ResourceReference } from '@/editor/ResourceReference'
+import {
+  DOCUMENT_LINK_TRANSACTION_META,
+  createBindIntent,
+  createDocumentReferenceAttributes,
+  createDocumentResourceLinkExtension,
+  createUnbindIntent,
+  getResourceReferenceIds,
+  runDocumentLinkTransaction,
+  type DocumentLinkTrigger
+} from '@/editor/documentResourceLink'
+import { ResourceReference, type ResourceReferenceAttributes } from '@/editor/ResourceReference'
 import { useAuthStore } from '@/stores/auth'
-import { confirmAction, toastError, toastSuccess } from '@/utils/feedback'
+import { confirmAction, toastError, toastInfo, toastSuccess } from '@/utils/feedback'
 import { readAuthSession } from '@/utils/authSession'
 
 /** 当前页面路由，用于区分创建模式和编辑模式并读取文档 ID。 */
@@ -122,6 +136,20 @@ const createdShareLinkId = ref<number | null>(null)
 const shareUrlCopied = ref(false)
 let shareUrlCopyTimer: number | null = null
 
+/** `[[关键词` 绑定/重绑定候选弹层的当前位置和模式。 */
+const documentLinkPicker = ref<DocumentLinkTrigger | null>(null)
+/** 当前用户可访问且未删除的协作文档候选。 */
+const documentLinkCandidates = ref<DocumentMetadata[]>([])
+/** 候选文档列表请求状态。 */
+const documentLinkCandidatesLoading = ref(false)
+/** 候选文档列表请求错误；不影响正文协同。 */
+const documentLinkCandidatesError = ref<string | null>(null)
+/** 键盘上下移动时的当前候选索引。 */
+const documentLinkCandidateIndex = ref(0)
+/** 当前被 Tiptap NodeSelection 选中的资源引用。 */
+const selectedResourceReference = ref<ResourceReferenceAttributes | null>(null)
+let documentLinkCandidateRequestVersion = 0
+
 /** 授权列表中的可编辑行，草稿字段只在保存成功后由服务端数据覆盖。 */
 interface AuthorizationRow extends DocumentUserAuthorization {
   draftPermission: DocumentPermission
@@ -155,6 +183,17 @@ const canWrite = computed(() => metadata.value?.owner === true || metadata.value
 const canManageShareLinks = computed(() => isOwner.value && authStore.hasScope('document:write'))
 /** 编辑器是否已经同步且允许执行会改变正文的操作。 */
 const editorCanEdit = computed(() => editorIsSynced.value && canWrite.value)
+/** 只有写权限、同步完成且弹层仍属于当前编辑器时才展示候选。 */
+const documentLinkPickerVisible = computed(() => Boolean(documentLinkPicker.value) && editorCanEdit.value)
+/** 将候选弹层限制在当前视口内；坐标由 ProseMirror 以 viewport 单位提供。 */
+const documentLinkPickerStyle = computed(() => {
+  const picker = documentLinkPicker.value
+  if (!picker || typeof window === 'undefined') return {}
+  return {
+    left: `${Math.max(12, Math.min(picker.left, window.innerWidth - 332))}px`,
+    top: `${picker.top + 8}px`
+  }
+})
 /** 页面上展示的资源级权限标签。 */
 const accessLabel = computed(() => {
   if (isOwner.value) return '所有者'
@@ -561,6 +600,7 @@ function teardownEditor(): void {
   ydoc?.destroy()
   ydoc = null
   editorVersion.value += 1
+  resetDocumentLinkUi()
   collaboratorCount.value = 1
   connectionState.value = 'closed'
   connectionMessage.value = null
@@ -632,6 +672,7 @@ async function initializeEditor(): Promise<void> {
         connectionState.value = state
         connectionMessage.value = message || null
         editor?.setEditable(state === 'synced' && canWrite.value && !accessUnavailable.value)
+        if (state !== 'synced' || !canWrite.value || accessUnavailable.value) closeDocumentLinkPicker()
       },
       onAwarenessChange: count => {
         if (requestedVersion === initializationVersion) collaboratorCount.value = Math.max(1, count)
@@ -671,7 +712,16 @@ async function initializeEditor(): Promise<void> {
         StarterKit.configure({ undoRedo: false }),
         Collaboration.configure({ document, field: 'content' }),
         createDocumentCollaborationCaret(client, localAwarenessUser),
-        ResourceReference
+        ResourceReference,
+        createDocumentResourceLinkExtension({
+          ydoc: document,
+          isEditable: () => editorCanEdit.value,
+          getExistingRefIds: () => editor ? getResourceReferenceIds(editor.state.doc) : new Set<string>(),
+          onTriggerChange: handleDocumentLinkTriggerChange,
+          onTriggerKeyDown: handleDocumentLinkTriggerKeyDown,
+          onResourceReferenceSelectionChange: attributes => { selectedResourceReference.value = attributes },
+          onActionBlocked: showDocumentLinkNotice
+        })
       ],
       editorProps: {
         attributes: {
@@ -769,22 +819,196 @@ function isActive(name: string): boolean {
   return editor?.isActive(name) ?? false
 }
 
-/** 插入仅保存引用属性的行内资源引用节点。 */
-function insertResourceReference(): void {
-  if (!editorCanEdit.value) return
-  /** 用户为行内资源引用输入的展示文本。 */
-  const displayText = window.prompt('请输入引用的显示文本')?.trim()
-  if (!displayText) return
-  editor?.chain().focus().insertContent({
-    type: 'resourceReference',
-    attrs: {
-      refId: crypto.randomUUID(),
-      resourceType: null,
-      resourceId: null,
-      displayText,
-      alias: null
-    }
-  }).run()
+/** 清理当前文档引用候选和选中状态，避免路由切换复用旧文档的 UI。 */
+function resetDocumentLinkUi(): void {
+  documentLinkCandidateRequestVersion += 1
+  documentLinkPicker.value = null
+  documentLinkCandidates.value = []
+  documentLinkCandidatesLoading.value = false
+  documentLinkCandidatesError.value = null
+  documentLinkCandidateIndex.value = 0
+  selectedResourceReference.value = null
+}
+
+/** 关闭候选弹层并使已经发出的列表请求失效。 */
+function closeDocumentLinkPicker(): void {
+  documentLinkCandidateRequestVersion += 1
+  documentLinkPicker.value = null
+  documentLinkCandidates.value = []
+  documentLinkCandidatesLoading.value = false
+  documentLinkCandidatesError.value = null
+  documentLinkCandidateIndex.value = 0
+}
+
+/** 将交互插件发现的 `[[关键词` 入口映射到候选列表请求。 */
+function handleDocumentLinkTriggerChange(trigger: DocumentLinkTrigger | null): void {
+  // 重绑定弹层不是由文本触发；编辑器事务更新时不要误关掉它。
+  if (!trigger && documentLinkPicker.value?.mode === 'rebind') return
+  documentLinkPicker.value = trigger
+  documentLinkCandidateIndex.value = 0
+  if (!trigger) {
+    documentLinkCandidates.value = []
+    documentLinkCandidatesLoading.value = false
+    documentLinkCandidatesError.value = null
+    return
+  }
+  void loadDocumentLinkCandidates(trigger.query, trigger)
+}
+
+/** 查询当前用户可访问且未逻辑删除的协作文档，并丢弃过期弹层的响应。 */
+async function loadDocumentLinkCandidates(query: string, picker: DocumentLinkTrigger): Promise<void> {
+  const requestedVersion = ++documentLinkCandidateRequestVersion
+  documentLinkCandidatesLoading.value = true
+  documentLinkCandidatesError.value = null
+  try {
+    const records = await documentApi.list()
+    if (requestedVersion !== documentLinkCandidateRequestVersion || documentLinkPicker.value !== picker) return
+    const normalizedQuery = query.trim().toLocaleLowerCase()
+    documentLinkCandidates.value = records.filter(record => {
+      if (record.deleted || !Number.isSafeInteger(record.documentId) || record.documentId <= 0
+          || typeof record.title !== 'string') return false
+      return !normalizedQuery || record.title.toLocaleLowerCase().includes(normalizedQuery)
+    })
+  } catch (cause) {
+    if (requestedVersion !== documentLinkCandidateRequestVersion || documentLinkPicker.value !== picker) return
+    documentLinkCandidates.value = []
+    documentLinkCandidatesError.value = getErrorMessage(cause, '无法加载可绑定的协作文档')
+  } finally {
+    if (requestedVersion === documentLinkCandidateRequestVersion) documentLinkCandidatesLoading.value = false
+  }
+}
+
+/** 处理候选弹层的上下移动、确认和取消键。 */
+function handleDocumentLinkTriggerKeyDown(
+  event: KeyboardEvent,
+  trigger: { from: number; to: number; query: string }
+): boolean {
+  if (!documentLinkPicker.value || documentLinkPicker.value.mode !== 'bind') return false
+  if (documentLinkPicker.value.from !== trigger.from || documentLinkPicker.value.to !== trigger.to) return false
+
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    if (documentLinkCandidates.value.length === 0) return true
+    const direction = event.key === 'ArrowDown' ? 1 : -1
+    const count = documentLinkCandidates.value.length
+    documentLinkCandidateIndex.value = (documentLinkCandidateIndex.value + direction + count) % count
+    return true
+  }
+  if (event.key === 'Escape') {
+    closeDocumentLinkPicker()
+    return true
+  }
+  if (event.key === 'Enter') {
+    const candidate = documentLinkCandidates.value[documentLinkCandidateIndex.value]
+    if (candidate) void selectDocumentLinkCandidate(candidate)
+    return Boolean(candidate)
+  }
+  return false
+}
+
+/** 候选按钮和回车共用的绑定/重绑定提交入口。 */
+function selectDocumentLinkCandidate(candidate: DocumentMetadata): void {
+  if (!editorCanEdit.value || !editor || !ydoc || candidate.deleted
+      || !Number.isSafeInteger(candidate.documentId) || candidate.documentId <= 0
+      || typeof candidate.title !== 'string') return
+  const picker = documentLinkPicker.value
+  if (!picker) return
+
+  if (picker.mode === 'rebind') {
+    rebindSelectedDocumentReference(candidate, picker)
+    return
+  }
+
+  const existingRefIds = getResourceReferenceIds(editor.state.doc)
+  const attributes = createDocumentReferenceAttributes(candidate.documentId, candidate.title, existingRefIds)
+  const intent = createBindIntent(attributes.refId, candidate.documentId)
+  const command = () => editor?.chain()
+    .focus()
+    .insertContentAt({ from: picker.from, to: picker.to }, { type: 'resourceReference', attrs: attributes })
+    .run() ?? false
+  closeDocumentLinkPicker()
+  if (runDocumentLinkTransaction(ydoc, intent, command)) toastSuccess('文档引用已绑定')
+}
+
+/** 读取当前 NodeSelection，以原 refId 更新目标并只发送一个 BIND LINK。 */
+function rebindSelectedDocumentReference(candidate: DocumentMetadata, picker: DocumentLinkTrigger): void {
+  if (!editor || !ydoc || !selectedResourceReference.value || !picker.refId) return
+  const selection = editor.state.selection
+  if (!(selection instanceof NodeSelection)
+      || selection.node.type.name !== 'resourceReference'
+      || selection.node.attrs.refId !== picker.refId) {
+    closeDocumentLinkPicker()
+    showDocumentLinkNotice('引用选择已变化，请重新选择后再绑定。')
+    return
+  }
+
+  const attributes: ResourceReferenceAttributes = {
+    ...selectedResourceReference.value,
+    refId: picker.refId,
+    resourceType: 'DOCUMENT',
+    resourceId: String(candidate.documentId),
+    displayText: candidate.title
+  }
+  const intent = createBindIntent(picker.refId, candidate.documentId)
+  const transaction = editor.state.tr
+    .setNodeMarkup(selection.from, undefined, attributes)
+    .setMeta(DOCUMENT_LINK_TRANSACTION_META, true)
+  closeDocumentLinkPicker()
+  editor.view.focus()
+  runDocumentLinkTransaction(ydoc, intent, () => {
+    editor?.view.dispatch(transaction)
+    return true
+  })
+  toastSuccess('文档引用已重新绑定')
+}
+
+/** 对当前选中的引用执行 UNBIND；历史空属性占位节点按普通删除处理。 */
+function unbindSelectedDocumentReference(): void {
+  if (!editorCanEdit.value || !editor) return
+  const selection = editor.state.selection
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'resourceReference') return
+  const attributes = selectedResourceReference.value
+  const intent = attributes ? createUnbindIntent(attributes) : null
+  closeDocumentLinkPicker()
+  if (!intent) {
+    editor.chain().focus().deleteSelection().run()
+    return
+  }
+  if (!ydoc) return
+  const transaction = editor.state.tr
+    .deleteSelection()
+    .setMeta(DOCUMENT_LINK_TRANSACTION_META, true)
+  editor.view.focus()
+  runDocumentLinkTransaction(ydoc, intent, () => {
+    editor?.view.dispatch(transaction)
+    return true
+  })
+  toastSuccess('文档引用已解绑')
+}
+
+/** 点击“重新绑定”时用当前节点位置打开同一候选列表，保留原 refId。 */
+function openDocumentReferenceRebindPicker(): void {
+  if (!editorCanEdit.value || !editor || !selectedResourceReference.value) return
+  const selection = editor.state.selection
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'resourceReference') return
+  const coords = editor.view.coordsAtPos(selection.from)
+  const picker: DocumentLinkTrigger = {
+    from: selection.from,
+    to: selection.to,
+    // 重绑定不应被旧标题限制，候选列表展示当前用户全部可访问文档。
+    query: '',
+    mode: 'rebind',
+    left: coords.left,
+    top: coords.bottom,
+    refId: selectedResourceReference.value.refId
+  }
+  documentLinkPicker.value = picker
+  documentLinkCandidateIndex.value = 0
+  void loadDocumentLinkCandidates(picker.query, picker)
+}
+
+/** 插件无法继续执行时使用统一的轻量提示，不改变正文和协作队列。 */
+function showDocumentLinkNotice(message: string): void {
+  toastInfo(message)
 }
 
 /** 返回文档列表页。 */
@@ -866,7 +1090,10 @@ onUnmounted(() => {
           <button type="button" title="斜体" :class="{ active: isActive('italic') }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleItalic().run() ?? false)"><Italic class="h-4 w-4" /></button>
           <button type="button" title="项目列表" :class="{ active: isActive('bulletList') }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleBulletList().run() ?? false)"><List class="h-4 w-4" /></button>
           <span class="toolbar-separator" />
-          <button type="button" title="插入资源引用" :disabled="!editorCanEdit" @click="insertResourceReference"><Link2 class="h-4 w-4" /><span>引用</span></button>
+          <template v-if="selectedResourceReference">
+            <button type="button" title="解绑当前引用" :disabled="!editorCanEdit" @click="unbindSelectedDocumentReference"><Unlink2 class="h-4 w-4" /><span>解绑</span></button>
+            <button type="button" title="重新绑定当前引用" :disabled="!editorCanEdit" @click="openDocumentReferenceRebindPicker"><RefreshCw class="h-4 w-4" /><span>重绑定</span></button>
+          </template>
           <span class="collaborator-count"><Users class="h-4 w-4" /> {{ collaboratorCount }}</span>
         </div>
 
@@ -879,6 +1106,39 @@ onUnmounted(() => {
     </template>
 
     <Teleport to="body">
+      <div
+        v-if="documentLinkPickerVisible"
+        class="document-link-picker"
+        :style="documentLinkPickerStyle"
+        role="listbox"
+        aria-label="可绑定的协作文档"
+      >
+        <div class="document-link-picker-heading">
+          <span>{{ documentLinkPicker?.mode === 'rebind' ? '重新绑定文档' : '绑定到协作文档' }}</span>
+          <small v-if="documentLinkPicker?.query">{{ documentLinkPicker.query }}</small>
+        </div>
+        <div v-if="documentLinkCandidatesLoading" class="document-link-picker-state"><Loader2 class="h-4 w-4 animate-spin" /> 正在加载文档…</div>
+        <div v-else-if="documentLinkCandidatesError" class="document-link-picker-state is-error">{{ documentLinkCandidatesError }}</div>
+        <div v-else-if="documentLinkCandidates.length === 0" class="document-link-picker-state">没有匹配的可访问文档</div>
+        <div v-else class="document-link-picker-options">
+          <button
+            v-for="(candidate, index) in documentLinkCandidates"
+            :key="candidate.documentId"
+            class="document-link-picker-option"
+            :class="{ active: index === documentLinkCandidateIndex }"
+            type="button"
+            role="option"
+            :aria-selected="index === documentLinkCandidateIndex"
+            @mousedown.prevent
+            @mouseenter="documentLinkCandidateIndex = index"
+            @click="selectDocumentLinkCandidate(candidate)"
+          >
+            <span class="document-link-picker-option-title">{{ candidate.title }}</span>
+            <span class="document-link-picker-option-id">#{{ candidate.documentId }}</span>
+          </button>
+        </div>
+        <div class="document-link-picker-hint">↑↓ 选择 · Enter 确认 · Esc 取消</div>
+      </div>
       <Transition name="authorization-modal">
         <div
           v-if="authorizationModalVisible"
@@ -1210,6 +1470,17 @@ h1 { margin: 10px 0; color: var(--cn-text); font-size: 28px; font-weight: 800; }
 .editor-shell { position: relative; min-height: 62vh; border: 1px solid var(--cn-border); border-top: 0; border-radius: 0 0 var(--cn-radius-md) var(--cn-radius-md); background: var(--cn-surface); overflow: hidden; }
 .editor-shell.is-readonly { background: var(--cn-bg-subtle); }
 .editor-host { min-height: 62vh; }
+.document-link-picker { position: fixed; z-index: 80; width: min(320px, calc(100vw - 24px)); overflow: hidden; border: 1px solid var(--cn-border-strong); border-radius: var(--cn-radius-md); background: var(--cn-surface); box-shadow: var(--cn-shadow-md); }
+.document-link-picker-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--cn-border); padding: 10px 12px 8px; color: var(--cn-text); font-size: 12px; font-weight: 800; }
+.document-link-picker-heading small { min-width: 0; overflow: hidden; color: var(--cn-accent); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.document-link-picker-options { display: grid; max-height: 250px; overflow-y: auto; padding: 5px; }
+.document-link-picker-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; border: 0; border-radius: var(--cn-radius-sm); background: transparent; color: var(--cn-text-soft); padding: 8px 9px; text-align: left; }
+.document-link-picker-option:hover, .document-link-picker-option.active { background: var(--cn-surface-muted); color: var(--cn-text); }
+.document-link-picker-option-title { min-width: 0; overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.document-link-picker-option-id { flex: 0 0 auto; color: var(--cn-text-faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.document-link-picker-state { display: flex; min-height: 54px; align-items: center; justify-content: center; gap: 7px; color: var(--cn-text-muted); padding: 10px 12px; font-size: 11px; text-align: center; }
+.document-link-picker-state.is-error { color: var(--cn-danger); }
+.document-link-picker-hint { border-top: 1px solid var(--cn-border); color: var(--cn-text-faint); padding: 7px 10px; font-size: 10px; text-align: right; }
 .sync-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; background: color-mix(in srgb, var(--cn-surface) 88%, transparent); color: var(--cn-text-muted); font-size: 13px; font-weight: 700; }
 .error-message { display: flex; align-items: center; gap: 7px; margin: 12px 0 0; font-size: 12px; }
 .authorization-modal-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, #0f172a 72%, transparent); padding: 20px; backdrop-filter: blur(7px); }
@@ -1286,6 +1557,7 @@ h1 { margin: 10px 0; color: var(--cn-text); font-size: 28px; font-weight: 800; }
 :deep(.document-tiptap-editor h1), :deep(.document-tiptap-editor h2), :deep(.document-tiptap-editor h3) { color: var(--cn-text); line-height: 1.3; }
 :deep(.document-tiptap-editor p.is-editor-empty:first-child::before) { float: left; height: 0; color: var(--cn-text-faint); content: '开始记录你的想法…'; pointer-events: none; }
 :deep(.document-resource-reference) { display: inline-block; border-radius: 4px; background: color-mix(in srgb, var(--cn-accent) 12%, transparent); color: var(--cn-accent); padding: 0 4px; font-size: .92em; font-weight: 700; }
+:deep(.document-resource-reference.ProseMirror-selectednode) { outline: 2px solid color-mix(in srgb, var(--cn-accent) 58%, transparent); outline-offset: 1px; }
 :deep(.document-tiptap-editor .collaboration-carets__caret) {
   position: relative;
   z-index: 2;

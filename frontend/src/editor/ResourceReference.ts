@@ -1,11 +1,11 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 
 export interface ResourceReferenceAttributes {
-  /** 引用节点自身的稳定 ID；example: {@code 'resource-ref-42'} */
+  /** 引用节点自身的稳定 ID；新建、复制和导入时必须使用新的 UUID。 */
   refId: string
-  /** 被引用资源的类型；example: {@code 'note'} */
+  /** 被引用资源的类型；文档绑定协议使用大写 DOCUMENT。 */
   resourceType: string | null
-  /** 被引用资源的业务 ID；example: {@code '42'} */
+  /** 被引用资源的业务 ID；以十进制字符串保存，避免前端 number 精度丢失。 */
   resourceId: string | null
   /** 编辑器中展示的引用文本；example: {@code '项目设计文档'} */
   displayText: string
@@ -28,11 +28,27 @@ export const ResourceReference = Node.create({
   /** 声明引用节点可持久化的最小属性集合。 */
   addAttributes() {
     return {
-      refId: { default: null },
-      resourceType: { default: null },
-      resourceId: { default: null },
-      displayText: { default: '' },
-      alias: { default: null }
+      // 保留 null 默认值以兼容历史占位节点；新 Link 操作会在业务层严格校验完整属性。
+      refId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-ref-id') || null
+      },
+      resourceType: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-resource-type') || null
+      },
+      resourceId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-resource-id') || null
+      },
+      displayText: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-display-text') || element.textContent || ''
+      },
+      alias: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-alias') || null
+      }
     }
   },
 
@@ -50,6 +66,7 @@ export const ResourceReference = Node.create({
         'data-ref-id': attributes.refId,
         'data-resource-type': attributes.resourceType,
         'data-resource-id': attributes.resourceId,
+        'data-display-text': attributes.displayText,
         'data-alias': attributes.alias,
         class: 'document-resource-reference'
       },

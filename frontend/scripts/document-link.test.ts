@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as Y from 'yjs'
-import { Schema, Slice } from '@tiptap/pm/model'
+import { Fragment, Schema, Slice } from '@tiptap/pm/model'
+import { EditorState, TextSelection } from '@tiptap/pm/state'
 import {
   createDocumentWsControl,
   decodeDocumentBindingEnvelope,
@@ -25,6 +26,9 @@ import {
   createBindIntent,
   createDocumentReferenceAttributes,
   createUnbindIntent,
+  findDocumentLinkTrigger,
+  flattenResourceReferencesToText,
+  getResourceReferenceAttributesInFragment,
   getResourceReferenceIds,
   remapResourceReferenceIds,
   remapResourceReferenceIdsInSlice,
@@ -471,6 +475,57 @@ test('remaps every pasted resource refId without mutating the source document', 
   )
   const remappedParagraph = schema.node('paragraph', null, remappedSlice.content)
   assert.equal(countResourceReferences(remappedParagraph), 1)
+})
+
+test('recognizes only a trailing [[ trigger and preserves its replacement range', () => {
+  const schema = createTestSchema()
+  const text = '前文 [[目标'
+  const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text(text)])])
+  const state = EditorState.create({
+    schema,
+    doc,
+    selection: TextSelection.create(doc, 1 + text.length)
+  })
+  assert.deepEqual(findDocumentLinkTrigger(state), {
+    from: 4,
+    to: 1 + text.length,
+    query: '目标'
+  })
+
+  const ordinaryText = '前文 [目标'
+  const ordinaryDoc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text(ordinaryText)])])
+  const ordinaryState = EditorState.create({
+    schema,
+    doc: ordinaryDoc,
+    selection: TextSelection.create(ordinaryDoc, 1 + ordinaryText.length)
+  })
+  assert.equal(findDocumentLinkTrigger(ordinaryState), null)
+})
+
+test('converts multi-reference paste content to display text without retaining resource nodes', () => {
+  const schema = createTestSchema()
+  const first = schema.node('resourceReference', {
+    refId: REF_ID,
+    resourceType: 'DOCUMENT',
+    resourceId: '42',
+    displayText: '第一个文档',
+    alias: null
+  })
+  const second = schema.node('resourceReference', {
+    refId: '123e4567-e89b-12d3-a456-426614174001',
+    resourceType: 'DOCUMENT',
+    resourceId: '43',
+    displayText: '第二个文档',
+    alias: '别名'
+  })
+  const slice = new Slice(Fragment.from(schema.node('paragraph', null, [first, schema.text(' / '), second])), 0, 0)
+  const references = getResourceReferenceAttributesInFragment(slice.content)
+  assert.equal(references.length, 2)
+
+  const flattened = flattenResourceReferencesToText(slice)
+  const flattenedDoc = schema.node('doc', null, flattened.content)
+  assert.equal(countResourceReferences(flattenedDoc), 0)
+  assert.equal(flattenedDoc.textContent, '第一个文档 / 别名')
 })
 
 test('keeps LinkIntent as the Yjs transaction origin for exactly one editor action', () => {

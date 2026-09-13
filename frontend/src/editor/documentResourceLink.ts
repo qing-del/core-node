@@ -1,5 +1,8 @@
 import * as Y from 'yjs'
+import { Extension } from '@tiptap/core'
 import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { NodeSelection, Plugin, PluginKey, type EditorState } from '@tiptap/pm/state'
+import type { EditorView } from '@tiptap/pm/view'
 import {
   DocumentBindingCommandType,
   DocumentBindingTargetType,
@@ -10,6 +13,7 @@ import type { ResourceReferenceAttributes } from './ResourceReference.ts'
 
 export const DOCUMENT_RESOURCE_TYPE = 'DOCUMENT'
 export const RESOURCE_REFERENCE_NODE_NAME = 'resourceReference'
+export const DOCUMENT_LINK_TRANSACTION_META = 'document-link-transaction'
 
 const MAX_SIGNED_BIGINT = 0x7fffffffffffffffn
 const MAX_REF_ID_ATTEMPTS = 100
@@ -143,6 +147,22 @@ export function countResourceReferences(document: ProseMirrorNode): number {
   return count
 }
 
+/** 收集片段内的 resourceReference 属性；用于粘贴策略和绑定目标校验。 */
+export function getResourceReferenceAttributesInFragment(fragment: Fragment): ResourceReferenceAttributes[] {
+  const references: ResourceReferenceAttributes[] = []
+  fragment.forEach(node => collectResourceReferenceAttributes(node, references))
+  return references
+}
+
+/** 将引用节点降级为可读普通文本，不产生绑定动作。 */
+export function flattenResourceReferencesToText(slice: Slice): Slice {
+  const content = mapResourceReferenceFragment(slice.content, node => {
+    if (node.type.name !== RESOURCE_REFERENCE_NODE_NAME) return node
+    return node.type.schema.text(formatResourceReferenceText(node.attrs))
+  })
+  return new Slice(content, slice.openStart, slice.openEnd)
+}
+
 /** 为复制/粘贴/导入的每个引用分配全新的 refId，并保留其 target 属性。 */
 export function remapResourceReferenceIds(
   document: ProseMirrorNode,
@@ -189,6 +209,286 @@ function mapResourceReferenceFragment(
   mapper: (node: ProseMirrorNode) => ProseMirrorNode
 ): Fragment {
   return Fragment.fromArray(fragment.content.map(child => mapResourceReferenceNodes(child, mapper)))
+}
+
+function collectResourceReferenceAttributes(
+  node: ProseMirrorNode,
+  references: ResourceReferenceAttributes[]
+): void {
+  if (node.type.name === RESOURCE_REFERENCE_NODE_NAME) {
+    references.push(toResourceReferenceAttributes(node.attrs))
+  }
+  node.content.forEach(child => collectResourceReferenceAttributes(child, references))
+}
+
+function toResourceReferenceAttributes(attrs: Record<string, unknown>): ResourceReferenceAttributes {
+  return {
+    refId: typeof attrs.refId === 'string' ? attrs.refId : '',
+    resourceType: typeof attrs.resourceType === 'string' ? attrs.resourceType : null,
+    resourceId: typeof attrs.resourceId === 'string' ? attrs.resourceId : null,
+    displayText: typeof attrs.displayText === 'string' ? attrs.displayText : '',
+    alias: typeof attrs.alias === 'string' ? attrs.alias : null
+  }
+}
+
+function formatResourceReferenceText(attrs: Record<string, unknown>): string {
+  const alias = typeof attrs.alias === 'string' ? attrs.alias.trim() : ''
+  const displayText = typeof attrs.displayText === 'string' ? attrs.displayText.trim() : ''
+  return alias || displayText || '未命名引用'
+}
+
+/** 判断引用是否拥有可以发送给关系投影器的完整 DOCUMENT 目标信息。 */
+function isBoundDocumentReference(attributes: ResourceReferenceAttributes): boolean {
+  return attributes.resourceType === DOCUMENT_RESOURCE_TYPE
+    && isNonZeroUuid(attributes.refId)
+    && resourceIdToTargetId(attributes.resourceId) !== null
+}
+
+interface DocumentDeletionTarget {
+  from: number
+  to: number
+  attributes: ResourceReferenceAttributes
+}
+
+/** 找出一次删除/替换范围内的完整绑定引用；历史占位节点故意忽略。 */
+function getBoundReferencesInRange(
+  state: EditorState,
+  from: number,
+  to: number
+): DocumentDeletionTarget[] {
+  const targets: DocumentDeletionTarget[] = []
+  state.doc.nodesBetween(from, to, (node, position) => {
+    if (node.type.name !== RESOURCE_REFERENCE_NODE_NAME) return
+    const attributes = toResourceReferenceAttributes(node.attrs)
+    if (isBoundDocumentReference(attributes)) {
+      targets.push({ from: position, to: position + node.nodeSize, attributes })
+    }
+  })
+  return targets
+}
+
+/** 根据按键方向取得光标相邻的引用，或取得普通文本选择范围内的引用。 */
+function getDeletionTargets(state: EditorState, key: string): DocumentDeletionTarget[] {
+  const { selection } = state
+  if (selection instanceof NodeSelection && selection.node.type.name === RESOURCE_REFERENCE_NODE_NAME) {
+    const attributes = toResourceReferenceAttributes(selection.node.attrs)
+    return isBoundDocumentReference(attributes)
+      ? [{ from: selection.from, to: selection.to, attributes }]
+      : []
+  }
+
+  if (!selection.empty) return getBoundReferencesInRange(state, selection.from, selection.to)
+
+  const $from = selection.$from
+  const adjacent = key === 'Backspace' ? $from.nodeBefore : $from.nodeAfter
+  if (!adjacent || adjacent.type.name !== RESOURCE_REFERENCE_NODE_NAME) return []
+  const attributes = toResourceReferenceAttributes(adjacent.attrs)
+  if (!isBoundDocumentReference(attributes)) return []
+  const from = key === 'Backspace' ? selection.from - adjacent.nodeSize : selection.from
+  return [{ from, to: from + adjacent.nodeSize, attributes }]
+}
+
+export interface DocumentLinkTriggerRange {
+  from: number
+  to: number
+  query: string
+}
+
+export interface DocumentLinkTrigger extends DocumentLinkTriggerRange {
+  mode: 'bind' | 'rebind'
+  left: number
+  top: number
+  refId?: string
+}
+
+export interface DocumentResourceLinkExtensionOptions {
+  ydoc: Y.Doc
+  isEditable: () => boolean
+  getExistingRefIds: () => ReadonlySet<string>
+  onTriggerChange: (trigger: DocumentLinkTrigger | null) => void
+  onTriggerKeyDown: (event: KeyboardEvent, trigger: DocumentLinkTriggerRange) => boolean
+  onResourceReferenceSelectionChange: (attributes: ResourceReferenceAttributes | null) => void
+  onActionBlocked: (message: string) => void
+}
+
+/** 只基于当前文本光标识别严格的 `[[关键词` 入口，不扫描 Yjs 原始更新。 */
+export function findDocumentLinkTrigger(state: EditorState): DocumentLinkTriggerRange | null {
+  const { selection } = state
+  if (!selection.empty || !selection.$from.parent.isTextblock) return null
+  const textBefore = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\ufffc')
+  const match = /\[\[([^\[\]\n]*)$/.exec(textBefore)
+  if (!match || match.index === undefined) return null
+  return {
+    from: selection.$from.start() + match.index,
+    to: selection.from,
+    query: match[1].trim()
+  }
+}
+
+/**
+ * 编辑器侧 Link 交互插件：候选入口、单引用粘贴和逐个解绑都在同一 Yjs
+ * transaction 中完成。协议客户端只根据 transaction origin 分类发送帧。
+ */
+export function createDocumentResourceLinkExtension(
+  options: DocumentResourceLinkExtensionOptions
+): Extension {
+  return Extension.create({
+    name: 'documentResourceLink',
+
+    addProseMirrorPlugins() {
+      return [new Plugin({
+        key: new PluginKey('documentResourceLink'),
+        view: view => {
+          let lastTriggerSignature = ''
+          let lastSelectionSignature = ''
+
+          const syncUiState = (currentView: EditorView): void => {
+            const range = options.isEditable() ? findDocumentLinkTrigger(currentView.state) : null
+            const trigger = range
+              ? (() => {
+                const coords = currentView.coordsAtPos(range.to)
+                return { ...range, mode: 'bind' as const, left: coords.left, top: coords.bottom }
+              })()
+              : null
+            const triggerSignature = trigger
+              ? `${trigger.mode}:${trigger.from}:${trigger.to}:${trigger.query}:${trigger.left}:${trigger.top}`
+              : 'none'
+            if (triggerSignature !== lastTriggerSignature) {
+              lastTriggerSignature = triggerSignature
+              options.onTriggerChange(trigger)
+            }
+
+            const selection = currentView.state.selection
+            const selectedNode = selection instanceof NodeSelection
+              && selection.node.type.name === RESOURCE_REFERENCE_NODE_NAME
+              ? selection.node
+              : null
+            const attributes = selectedNode ? toResourceReferenceAttributes(selectedNode.attrs) : null
+            const selectionSignature = attributes
+              ? `${attributes.refId}:${attributes.resourceType}:${attributes.resourceId}:${attributes.displayText}:${attributes.alias}`
+              : 'none'
+            if (selectionSignature !== lastSelectionSignature) {
+              lastSelectionSignature = selectionSignature
+              options.onResourceReferenceSelectionChange(attributes)
+            }
+          }
+
+          syncUiState(view)
+          return {
+            update: currentView => syncUiState(currentView),
+            destroy: () => {
+              options.onTriggerChange(null)
+              options.onResourceReferenceSelectionChange(null)
+            }
+          }
+        },
+        props: {
+          handleKeyDown: (view, event) => {
+            const trigger = options.isEditable() ? findDocumentLinkTrigger(view.state) : null
+            if (trigger && options.onTriggerKeyDown(event, trigger)) {
+              event.preventDefault()
+              return true
+            }
+            if (!options.isEditable() || (event.key !== 'Backspace' && event.key !== 'Delete')) return false
+
+            const targets = getDeletionTargets(view.state, event.key)
+            if (targets.length === 0) return false
+            if (targets.length > 1) {
+              event.preventDefault()
+              options.onActionBlocked('一次只能处理一个文档引用，请逐个删除或解绑。')
+              return true
+            }
+
+            const intent = createUnbindIntent(targets[0].attributes)
+            // 历史空属性占位节点按普通 CLIENT_UPDATE 删除。
+            if (!intent) return false
+            event.preventDefault()
+            const deletionFrom = view.state.selection.empty ? targets[0].from : view.state.selection.from
+            const deletionTo = view.state.selection.empty ? targets[0].to : view.state.selection.to
+            const transaction = view.state.tr
+              .delete(deletionFrom, deletionTo)
+              .setMeta(DOCUMENT_LINK_TRANSACTION_META, true)
+            options.ydoc.transact(() => view.dispatch(transaction), intent)
+            return true
+          },
+
+          handlePaste: (view, event, slice) => {
+            if (!options.isEditable()) return false
+
+            const targets = view.state.selection.empty
+              ? []
+              : getBoundReferencesInRange(view.state, view.state.selection.from, view.state.selection.to)
+            if (targets.length > 1) {
+              event.preventDefault()
+              options.onActionBlocked('粘贴会同时删除多个已绑定引用，请先逐个解绑。')
+              return true
+            }
+
+            const references = getResourceReferenceAttributesInFragment(slice.content)
+            if (references.length > 1) {
+              event.preventDefault()
+              options.onActionBlocked('一次只能粘贴一个文档引用，多个引用已转为普通文本。')
+              const plainSlice = flattenResourceReferencesToText(slice)
+              const intent = targets.length === 1 ? createUnbindIntent(targets[0].attributes) : undefined
+              return dispatchPaste(view, plainSlice, options, intent ?? undefined)
+            }
+
+            if (references.length === 1) {
+              if (targets.length === 1) {
+                event.preventDefault()
+                options.onActionBlocked('请先解绑已有引用，再粘贴新的文档引用。')
+                return true
+              }
+              const remapped = remapResourceReferenceIdsInSlice(slice, options.getExistingRefIds())
+              const [attributes] = getResourceReferenceAttributesInFragment(remapped.content)
+              const targetId = attributes ? resourceIdToTargetId(attributes.resourceId) : null
+              if (attributes
+                  && attributes.resourceType === DOCUMENT_RESOURCE_TYPE
+                  && targetId !== null
+                  && attributes.refId) {
+                event.preventDefault()
+                try {
+                  const intent = createBindIntent(attributes.refId, targetId)
+                  return dispatchPaste(view, remapped, options, intent)
+                } catch {
+                  // 非法导入节点降级为普通文本，不发送 malformed LINK。
+                }
+              }
+              event.preventDefault()
+              options.onActionBlocked('粘贴的文档引用无有效目标，已转为普通文本。')
+              return dispatchPaste(view, flattenResourceReferencesToText(remapped), options)
+            }
+
+            if (targets.length === 1) {
+              const intent = createUnbindIntent(targets[0].attributes)
+              if (intent) {
+                event.preventDefault()
+                return dispatchPaste(view, slice, options, intent)
+              }
+            }
+            return false
+          }
+        }
+      })]
+    }
+  })
+}
+
+function dispatchPaste(
+  view: EditorView,
+  slice: Slice,
+  options: DocumentResourceLinkExtensionOptions,
+  intent?: DocumentLinkIntent
+): boolean {
+  const transaction = view.state.tr
+    .replaceSelection(slice)
+    .setMeta(DOCUMENT_LINK_TRANSACTION_META, Boolean(intent))
+  if (intent) {
+    options.ydoc.transact(() => view.dispatch(transaction), intent)
+  } else {
+    view.dispatch(transaction)
+  }
+  return true
 }
 
 function normalizeRefId(value: string): string {
