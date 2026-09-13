@@ -2,6 +2,40 @@
 export const DOCUMENT_WS_PROTOCOL_VERSION = 1
 /** 二进制帧固定头长度：1 字节版本 + 1 字节类型 + 16 字节 UUID。 */
 export const DOCUMENT_WS_HEADER_BYTES = 18
+/** LINK payload 中 envelopeLength 字段的固定长度。 */
+export const DOCUMENT_LINK_ENVELOPE_LENGTH_BYTES = 4
+/** v0.6 BindingEnvelope body 的固定长度。 */
+export const DOCUMENT_BINDING_ENVELOPE_BODY_BYTES = 27
+/** LINK payload 在 raw Yjs update 之前的固定开销。 */
+export const DOCUMENT_LINK_FIXED_PAYLOAD_BYTES =
+  DOCUMENT_LINK_ENVELOPE_LENGTH_BYTES + DOCUMENT_BINDING_ENVELOPE_BODY_BYTES
+/** 服务端现有文档 WebSocket payload 上限；不包含外层 18 字节头。 */
+export const DOCUMENT_WS_MAX_PAYLOAD_BYTES = 256 * 1024
+
+/** v0.6 LINK 中的绑定命令值。 */
+export enum DocumentBindingCommandType {
+  BIND = 0x01,
+  UNBIND = 0x02
+}
+
+/** v0.6 LINK 中的资源目标类型。 */
+export enum DocumentBindingTargetType {
+  DOCUMENT = 0x01
+}
+
+/** LINK 的固定 27 字节 Envelope；targetId 使用 bigint 保留 MySQL BIGINT 精度。 */
+export interface DocumentBindingEnvelope {
+  schemaVersion: 1
+  commandType: DocumentBindingCommandType
+  refId: string
+  targetType: DocumentBindingTargetType
+  targetId: bigint
+}
+
+/** 绑定动作通过 Yjs transaction origin 与 raw update 关联。 */
+export interface DocumentLinkIntent extends DocumentBindingEnvelope {
+  kind: 'document-link-intent'
+}
 
 export type DocumentWsControlType =
   | 'JOIN_DOCUMENT'
@@ -9,6 +43,7 @@ export type DocumentWsControlType =
   | 'SYNC_COMPLETE'
   | 'LEAVE_DOCUMENT'
   | 'UPDATE_ACCEPTED'
+  | 'LINK_ACCEPTED'
   | 'AWARENESS_META'
   | 'ERROR'
   | 'PING'
@@ -46,6 +81,12 @@ export interface DocumentWsControlMessage {
   name?: string | null
   /** AWARENESS_META 关联的服务端颜色；REMOVE 时为空。 */
   color?: string | null
+  /** LINK_ACCEPTED 的 updates Stream 入队 ID。 */
+  updatesRedisOpId?: string | null
+  /** LINK_ACCEPTED 的 binding Stream 入队 ID。 */
+  bindingRedisOpId?: string | null
+  /** LINK_ACCEPTED 的排队状态；v0.6 固定为 QUEUED。 */
+  status?: string | null
 }
 
 /** JOIN_DOCUMENT 的强类型控制帧；服务端要求 Awareness client ID 必须存在。 */
@@ -75,8 +116,19 @@ export type DocumentWsAwarenessMeta =
       action: 'REMOVE'
       userId: null
       name: null
-      color: null
-    })
+    color: null
+  })
+
+/** 服务端确认 LINK 已原子写入两条 Redis Stream 的强类型消息。 */
+export interface DocumentWsLinkAcceptedMessage extends DocumentWsControlMessage {
+  type: 'LINK_ACCEPTED'
+  requestId: string
+  documentId: number
+  clientUpdateId: string
+  updatesRedisOpId: string
+  bindingRedisOpId: string
+  status: 'QUEUED'
+}
 
 export enum DocumentWsFrameType {
   /** 客户端提交的 Yjs 更新。 */
@@ -88,7 +140,9 @@ export enum DocumentWsFrameType {
   /** 服务端发送的快照之后历史更新。 */
   BOOTSTRAP_UPDATE = 0x04,
   /** 客户端或服务端发送的 awareness 在线状态。 */
-  AWARENESS = 0x05
+  AWARENESS = 0x05,
+  /** 客户端提交正文更新和一个 BindingEnvelope 的复合更新。 */
+  LINK = 0x06
 }
 
 export interface DocumentWsBinaryFrame {
@@ -122,6 +176,111 @@ function bytesUuid(bytes: Uint8Array): string {
   /** 不带短横线的完整小写十六进制 UUID。 */
   const hex = Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+/** 返回 UUID 是否为全零值；Envelope 的 refId 不允许使用该值。 */
+function isZeroUuid(value: string): boolean {
+  return value.replace(/-/g, '').toLowerCase() === '00000000000000000000000000000000'
+}
+
+/** 校验 Envelope 使用的 UUID 字符串，但不改变既有外层 frame 的兼容行为。 */
+function assertBindingRefId(value: string): void {
+  if (typeof value !== 'string' || isZeroUuid(value)) {
+    throw new Error('文档 LINK refId 必须是非零 UUID')
+  }
+  uuidBytes(value)
+}
+
+/** 校验 BindingEnvelope 的公共字段和 64 位 targetId 范围。 */
+function assertDocumentBindingEnvelope(envelope: DocumentBindingEnvelope): void {
+  if (!envelope || envelope.schemaVersion !== 1) {
+    throw new Error('文档 LINK Envelope schema 版本不支持')
+  }
+  if (envelope.commandType !== DocumentBindingCommandType.BIND
+      && envelope.commandType !== DocumentBindingCommandType.UNBIND) {
+    throw new Error('文档 LINK binding command type 无效')
+  }
+  assertBindingRefId(envelope.refId)
+  if (envelope.targetType !== DocumentBindingTargetType.DOCUMENT) {
+    throw new Error('文档 LINK target type 无效')
+  }
+  if (typeof envelope.targetId !== 'bigint' || envelope.targetId <= 0n
+      || envelope.targetId > 0x7fffffffffffffffn) {
+    throw new Error('文档 LINK targetId 无效')
+  }
+}
+
+/** 编码固定 27 字节 BindingEnvelope body；所有数值均使用大端序。 */
+export function encodeDocumentBindingEnvelope(envelope: DocumentBindingEnvelope): Uint8Array {
+  assertDocumentBindingEnvelope(envelope)
+  const body = new Uint8Array(DOCUMENT_BINDING_ENVELOPE_BODY_BYTES)
+  const view = new DataView(body.buffer)
+  body[0] = envelope.schemaVersion
+  body[1] = envelope.commandType
+  body.set(uuidBytes(envelope.refId), 2)
+  body[18] = envelope.targetType
+  view.setBigUint64(19, envelope.targetId, false)
+  return body
+}
+
+/** 解码固定 27 字节 BindingEnvelope body，并复用同一套字段校验。 */
+export function decodeDocumentBindingEnvelope(body: Uint8Array): DocumentBindingEnvelope {
+  if (body.byteLength !== DOCUMENT_BINDING_ENVELOPE_BODY_BYTES) {
+    throw new Error('文档 LINK binding envelope body 必须是 27 字节')
+  }
+  const view = new DataView(body.buffer, body.byteOffset, body.byteLength)
+  const envelope: DocumentBindingEnvelope = {
+    schemaVersion: body[0] as 1,
+    commandType: body[1] as DocumentBindingCommandType,
+    refId: bytesUuid(body.slice(2, 18)),
+    targetType: body[18] as DocumentBindingTargetType,
+    targetId: view.getBigUint64(19, false)
+  }
+  assertDocumentBindingEnvelope(envelope)
+  return envelope
+}
+
+/** 编码 LINK payload；Envelope length 字段不包含自身的 4 字节。 */
+export function encodeDocumentLinkPayload(
+  envelope: DocumentBindingEnvelope,
+  rawYjsUpdate: Uint8Array
+): Uint8Array {
+  assertDocumentBindingEnvelope(envelope)
+  if (!(rawYjsUpdate instanceof Uint8Array) || rawYjsUpdate.byteLength === 0) {
+    throw new Error('文档 LINK 必须携带非空 raw Yjs update')
+  }
+  const payloadLength = DOCUMENT_LINK_FIXED_PAYLOAD_BYTES + rawYjsUpdate.byteLength
+  if (payloadLength > DOCUMENT_WS_MAX_PAYLOAD_BYTES) {
+    throw new Error('文档 LINK payload 超出大小限制')
+  }
+
+  const payload = new Uint8Array(payloadLength)
+  const view = new DataView(payload.buffer)
+  view.setUint32(0, DOCUMENT_BINDING_ENVELOPE_BODY_BYTES, false)
+  payload.set(encodeDocumentBindingEnvelope(envelope), DOCUMENT_LINK_ENVELOPE_LENGTH_BYTES)
+  payload.set(rawYjsUpdate, DOCUMENT_LINK_FIXED_PAYLOAD_BYTES)
+  return payload
+}
+
+/** 解码 LINK payload；raw Yjs update 保持透明并复制为独立 Uint8Array。 */
+export function decodeDocumentLinkPayload(payload: Uint8Array): {
+  envelope: DocumentBindingEnvelope
+  rawYjsUpdate: Uint8Array
+} {
+  if (!(payload instanceof Uint8Array)
+      || payload.byteLength < DOCUMENT_LINK_FIXED_PAYLOAD_BYTES + 1
+      || payload.byteLength > DOCUMENT_WS_MAX_PAYLOAD_BYTES) {
+    throw new Error('文档 LINK payload 长度无效')
+  }
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
+  const envelopeLength = view.getUint32(0, false)
+  if (envelopeLength !== DOCUMENT_BINDING_ENVELOPE_BODY_BYTES) {
+    throw new Error('文档 LINK envelope length 必须是 27')
+  }
+  return {
+    envelope: decodeDocumentBindingEnvelope(payload.slice(DOCUMENT_LINK_ENVELOPE_LENGTH_BYTES, DOCUMENT_LINK_FIXED_PAYLOAD_BYTES)),
+    rawYjsUpdate: payload.slice(DOCUMENT_LINK_FIXED_PAYLOAD_BYTES)
+  }
 }
 
 /** 生成控制帧和 CLIENT_UPDATE 共用的请求关联 ID。 */
@@ -221,6 +380,50 @@ export function parseDocumentWsControl(data: string): DocumentWsControlMessage {
   }
   // 此处只校验外层结构；收到控制帧的处理器再判断该类型是否必须包含某个字段。
   return control as DocumentWsControlMessage
+}
+
+/** 严格解析服务端的 LINK_ACCEPTED，确认双 Stream 入队但不宣称 MySQL 已落库。 */
+export function parseDocumentWsLinkAccepted(
+  control: DocumentWsControlMessage,
+  expectedDocumentId?: number
+): DocumentWsLinkAcceptedMessage {
+  if (control.type !== 'LINK_ACCEPTED') {
+    throw new Error('文档 WebSocket 控制帧不是 LINK_ACCEPTED')
+  }
+  if (!isNonBlankString(control.requestId)) {
+    throw new Error('LINK_ACCEPTED requestId 无效')
+  }
+  uuidBytes(control.requestId)
+  if (!isPositiveSafeInteger(control.documentId)) {
+    throw new Error('LINK_ACCEPTED documentId 无效')
+  }
+  if (expectedDocumentId !== undefined && control.documentId !== expectedDocumentId) {
+    throw new Error('LINK_ACCEPTED documentId 与当前文档不匹配')
+  }
+  if (!isNonBlankString(control.clientUpdateId)) {
+    throw new Error('LINK_ACCEPTED clientUpdateId 无效')
+  }
+  uuidBytes(control.clientUpdateId)
+  if (!isNonBlankString(control.updatesRedisOpId)) {
+    throw new Error('LINK_ACCEPTED updatesRedisOpId 无效')
+  }
+  if (!isNonBlankString(control.bindingRedisOpId)) {
+    throw new Error('LINK_ACCEPTED bindingRedisOpId 无效')
+  }
+  if (control.status !== 'QUEUED') {
+    throw new Error('LINK_ACCEPTED status 必须是 QUEUED')
+  }
+
+  return {
+    ...control,
+    type: 'LINK_ACCEPTED',
+    requestId: control.requestId,
+    documentId: control.documentId,
+    clientUpdateId: control.clientUpdateId,
+    updatesRedisOpId: control.updatesRedisOpId,
+    bindingRedisOpId: control.bindingRedisOpId,
+    status: 'QUEUED'
+  }
 }
 
 /**
