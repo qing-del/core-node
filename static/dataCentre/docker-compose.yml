@@ -50,24 +50,31 @@ services:
 
   canal:
     # Canal 读取 MySQL Binlog；等待 MySQL 健康后再启动，避免实例配置过早连接失败。
-    image: canal/canal-server:v1.1.7
+    image: canal/canal-server:v1.1.8
     container_name: dev-canal
     hostname: dev-canal
     restart: unless-stopped
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       # Canal 实例名称，对应 conf 目录下的文件夹名
-      canal.instance.name: dev_db
+#      canal.instance.name: dev_db
+      canal.auto.scan: "false"
+      canal.destinations: example
+      canal.instance.master.address: mysql:3306
+      canal.instance.dbUsername: ${CANAL_DB_USER:-dev}
+      canal.instance.dbPassword: ${CANAL_DB_PASSWORD:-Dev@123456}
+      canal.instance.filter.regex: "${CANAL_FILTER:-personal_saas[.].*}"
     ports:
       # 11111: Canal TCP 协议端口
       # 11112: Canal Admin 端口（可选）
+      - "11110:11110"
       - "11111:11111"
       - "11112:11112"
     volumes:
       # 挂载自定义的 Canal 实例配置
-      - type: bind
-        source: D:/CodeData/canal/conf
-        target: /home/admin/canal-server/conf/dev_db
+      #- type: bind
+      #  source: D:/CodeData/canal/conf
+      #  target: /home/admin/canal-server/conf/dev_db
       # 挂载日志目录（可选，方便排查问题）
       - type: bind
         source: D:/CodeData/canal/logs
