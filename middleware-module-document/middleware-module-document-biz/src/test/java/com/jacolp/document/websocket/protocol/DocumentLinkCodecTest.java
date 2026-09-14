@@ -42,6 +42,21 @@ class DocumentLinkCodecTest {
     }
 
     @Test
+    void roundTripsAllSupportedResourceTargetTypesWithoutChangingEnvelopeShape() {
+        assertThat(DocumentBindingTargetType.DOCUMENT.wireValue()).isEqualTo(0x01);
+        assertThat(DocumentBindingTargetType.NOTE.wireValue()).isEqualTo(0x02);
+        assertThat(DocumentBindingTargetType.IMAGE.wireValue()).isEqualTo(0x03);
+
+        for (DocumentBindingTargetType targetType : DocumentBindingTargetType.values()) {
+            DocumentBindingEnvelope envelope = new DocumentBindingEnvelope(
+                    1, DocumentBindingCommandType.BIND, REF_ID, targetType, 42L);
+
+            assertThat(DocumentBindingEnvelope.decodeBody(envelope.encodeBody())).isEqualTo(envelope);
+            assertThat(DocumentLinkCodec.fixedPayloadBytes()).isEqualTo(31);
+        }
+    }
+
+    @Test
     void rejectsMalformedEnvelopeAndEmptyUpdate() {
         DocumentBindingEnvelope envelope = new DocumentBindingEnvelope(
                 1, DocumentBindingCommandType.BIND, REF_ID, DocumentBindingTargetType.DOCUMENT, 42L);

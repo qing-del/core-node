@@ -10,7 +10,6 @@ import com.jacolp.document.infrastructure.redis.DocumentRedisRepository;
 import com.jacolp.document.infrastructure.redis.StoredDocumentPendingBinding;
 import com.jacolp.document.websocket.protocol.DocumentBindingCommandType;
 import com.jacolp.document.websocket.protocol.DocumentBindingEnvelope;
-import com.jacolp.document.websocket.protocol.DocumentBindingTargetType;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,10 +96,6 @@ public class DocumentBindingConsumer {
 
     /** 在当前关系事务内应用单条已折叠命令。 */
     private void apply(long sourceDocumentId, DocumentBindingEnvelope envelope) {
-        if (envelope.targetType() != DocumentBindingTargetType.DOCUMENT) {
-            // 当前协议构造器已经拒绝未知类型；保留显式分支避免未来扩展后静默写错 resource_type。
-            throw new IllegalStateException("unsupported document LINK target type: " + envelope.targetType());
-        }
         if (envelope.commandType() == DocumentBindingCommandType.BIND) {
             applyBind(sourceDocumentId, envelope);
         } else {

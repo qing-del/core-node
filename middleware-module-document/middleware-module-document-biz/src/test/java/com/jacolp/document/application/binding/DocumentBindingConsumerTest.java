@@ -92,6 +92,33 @@ class DocumentBindingConsumerTest {
     }
 
     @Test
+    void projectsEverySupportedResourceTargetType() {
+        for (DocumentBindingTargetType targetType : DocumentBindingTargetType.values()) {
+            DocumentRedisRepository redisRepository = mock(DocumentRedisRepository.class);
+            ResourceNodeMapper resourceNodeMapper = mock(ResourceNodeMapper.class);
+            DocumentRelationMapper relationMapper = mock(DocumentRelationMapper.class);
+            when(redisRepository.readPendingBindings(7L, 500)).thenReturn(List.of(
+                    pending("target-" + targetType.name(), bind(REF_ID, 42L, targetType))), List.of());
+            doAnswer(invocation -> {
+                ResourceNodeDO node = invocation.getArgument(0);
+                node.setId(900L);
+                return 1;
+            }).when(resourceNodeMapper).insert(any(ResourceNodeDO.class));
+            when(relationMapper.insert(any())).thenReturn(1);
+            when(redisRepository.deletePendingBindings(7L, List.of("target-" + targetType.name())))
+                    .thenReturn(1L);
+
+            consumer(redisRepository, resourceNodeMapper, relationMapper,
+                    transactionTemplateThatExecutesCallbacks()).drain(7L);
+
+            ArgumentCaptor<ResourceNodeDO> node = ArgumentCaptor.forClass(ResourceNodeDO.class);
+            verify(resourceNodeMapper).insert(node.capture());
+            assertThat(node.getValue().getResourceType()).isEqualTo(targetType.resourceType());
+            assertThat(node.getValue().getTargetId()).isEqualTo(42L);
+        }
+    }
+
+    @Test
     void softDeletesActiveRelationButDoesNotCreateTombstoneForMissingOrDeletedRelation() {
         DocumentRedisRepository redisRepository = mock(DocumentRedisRepository.class);
         ResourceNodeMapper resourceNodeMapper = mock(ResourceNodeMapper.class);
@@ -180,8 +207,13 @@ class DocumentBindingConsumerTest {
     }
 
     private static DocumentBindingEnvelope bind(UUID refId, long targetId) {
+        return bind(refId, targetId, DocumentBindingTargetType.DOCUMENT);
+    }
+
+    private static DocumentBindingEnvelope bind(UUID refId, long targetId,
+                                                DocumentBindingTargetType targetType) {
         return new DocumentBindingEnvelope(1, DocumentBindingCommandType.BIND, refId,
-                DocumentBindingTargetType.DOCUMENT, targetId);
+                targetType, targetId);
     }
 
     private static DocumentBindingEnvelope unbind(UUID refId, long targetId) {

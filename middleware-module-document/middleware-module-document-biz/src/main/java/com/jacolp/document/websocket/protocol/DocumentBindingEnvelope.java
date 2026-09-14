@@ -12,9 +12,9 @@ public record DocumentBindingEnvelope(
         DocumentBindingCommandType commandType,
         /** 正文 resourceReference 节点的稳定身份。 */
         UUID refId,
-        /** 被引用资源的线上类型；v0.6 固定为 DOCUMENT。 */
+        /** 被引用资源的线上类型；支持 DOCUMENT、NOTE 和 IMAGE。 */
         DocumentBindingTargetType targetType,
-        /** 被引用文档的 MySQL BIGINT ID。 */
+        /** 被引用资源的 MySQL BIGINT ID。 */
         long targetId) {
 
     public static final int SCHEMA_VERSION = 1;

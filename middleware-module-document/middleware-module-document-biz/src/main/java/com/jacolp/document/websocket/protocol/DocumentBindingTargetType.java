@@ -2,9 +2,11 @@ package com.jacolp.document.websocket.protocol;
 
 import java.util.Arrays;
 
-/** LINK BindingEnvelope 中的目标资源类型；v0.6 只开放协作文档。 */
+/** LINK BindingEnvelope 中的目标资源类型；沿用 v0.6 的 DOCUMENT wire value。 */
 public enum DocumentBindingTargetType {
-    DOCUMENT(0x01, "DOCUMENT");
+    DOCUMENT(0x01, "DOCUMENT"),
+    NOTE(0x02, "NOTE"),
+    IMAGE(0x03, "IMAGE");
 
     private final int wireValue;
     private final String resourceType;

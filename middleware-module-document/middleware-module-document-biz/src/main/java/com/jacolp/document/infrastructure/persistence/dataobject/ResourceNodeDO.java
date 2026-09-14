@@ -17,7 +17,7 @@ public class ResourceNodeDO implements Serializable {
 
     /** 资源节点自增主键。 */
     private Long id;
-    /** 资源线上类型；v0.6 文档绑定固定为 {@code DOCUMENT}。 */
+    /** 资源线上类型；来自 LINK targetType 的 {@code DOCUMENT}/{@code NOTE}/{@code IMAGE}。 */
     private String resourceType;
     /** 目标资源在其所属业务模块中的 ID。 */
     private Long targetId;
