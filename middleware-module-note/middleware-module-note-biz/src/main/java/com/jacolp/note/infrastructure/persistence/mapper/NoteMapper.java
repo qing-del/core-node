@@ -24,6 +24,10 @@ public interface NoteMapper {
     @Select("select id, user_id, topic_id, title, description, storage_type, status, is_changing, missing_info_mask, missing_count, md_file_size, create_time, update_time from biz_note where id = #{id}")
     NoteDO selectById(@Param("id") Long id);
 
+    List<NoteDO> selectFileIndexPage(@Param("afterId") long afterId, @Param("limit") int limit);
+
+    NoteDO selectFileIndexById(@Param("id") Long id);
+
     NoteVO selectVoById(@Param("id") Long id);
     List<NoteDO> selectByIds(@Param("ids") List<Long> ids);
     List<NoteVO> listByCondition(@Param("userId") Long userId, @Param("topicId") Long topicId,

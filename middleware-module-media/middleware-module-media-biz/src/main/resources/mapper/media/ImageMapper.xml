@@ -58,6 +58,24 @@
         <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
     </select>
 
+    <select id="selectFileIndexPage" resultType="com.jacolp.media.infrastructure.persistence.dataobject.ImageDO">
+        SELECT id, user_id AS userId, topic_id AS topicId, filename, oss_url AS ossUrl,
+               storage_type AS storageType, file_size AS fileSize, is_public AS isPublic,
+               audit_status AS auditStatus, upload_time AS uploadTime
+        FROM biz_image
+        WHERE id &gt; #{afterId}
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectFileIndexById" resultType="com.jacolp.media.infrastructure.persistence.dataobject.ImageDO">
+        SELECT id, user_id AS userId, topic_id AS topicId, filename, oss_url AS ossUrl,
+               storage_type AS storageType, file_size AS fileSize, is_public AS isPublic,
+               audit_status AS auditStatus, upload_time AS uploadTime
+        FROM biz_image
+        WHERE id = #{id}
+    </select>
+
     <update id="deleteByIds">
         UPDATE biz_image SET audit_status = 4
         WHERE id IN
