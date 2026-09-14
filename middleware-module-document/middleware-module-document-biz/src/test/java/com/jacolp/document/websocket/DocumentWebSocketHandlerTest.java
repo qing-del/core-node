@@ -183,6 +183,55 @@ class DocumentWebSocketHandlerTest {
     }
 
     @Test
+    void schedulesLinkFlushWhenAcceptedAckCannotBeDelivered() throws Exception {
+        DocumentProperties properties = new DocumentProperties();
+        DocumentWsCodec codec = new DocumentWsCodec(new ObjectMapper(), properties);
+        DocumentMapper documentMapper = mock(DocumentMapper.class);
+        DocumentAccessService accessService = mock(DocumentAccessService.class);
+        DocumentRedisRepository redisRepository = mock(DocumentRedisRepository.class);
+        DocumentBootstrapService bootstrapService = mock(DocumentBootstrapService.class);
+        DocumentSchedulePublisher schedulePublisher = mock(DocumentSchedulePublisher.class);
+        DocumentSessionPresenceRegistry presenceRegistry = mock(DocumentSessionPresenceRegistry.class);
+        DocumentRoomLifecycleService lifecycleService = mock(DocumentRoomLifecycleService.class);
+        DocumentDO document = document(7L, 42L);
+        DocumentAccess ownerAccess = access(document, DocumentPermission.WRITE, true);
+        DocumentAccess collaboratorAccess = access(document, DocumentPermission.READ, false);
+        when(accessService.requireRead(7L, 42L)).thenReturn(ownerAccess);
+        when(accessService.requireRead(7L, 43L)).thenReturn(collaboratorAccess);
+        when(accessService.requireWrite(7L, 42L)).thenReturn(ownerAccess);
+        when(redisRepository.findRoomMeta(7L)).thenReturn(Optional.empty());
+        when(redisRepository.appendLinkPendingUpdate(any(), any()))
+                .thenReturn(new DocumentLinkAcceptedRedisOperations("200-0", "201-0"));
+        when(documentMapper.updateLastModificationIfActive(eq(7L), eq(42L), any(LocalDateTime.class), eq(42L)))
+                .thenReturn(1);
+
+        DocumentWebSocketHandler handler = handler(codec, documentMapper, accessService, redisRepository,
+                bootstrapService, schedulePublisher, presenceRegistry, lifecycleService, properties);
+        WebSocketSession owner = session("session-link-ack-failure-owner", principal(42L, "document:write"));
+        WebSocketSession collaborator = session("session-link-ack-failure-collaborator", principal(43L, "document:read"));
+        doAnswer(invocation -> {
+            WebSocketMessage<?> outgoing = invocation.getArgument(0);
+            if (outgoing instanceof TextMessage text && text.getPayload().contains("\"type\":\"LINK_ACCEPTED\"")) {
+                throw new IOException("connection closed while acknowledging LINK");
+            }
+            return null;
+        }).when(owner).sendMessage(any(WebSocketMessage.class));
+
+        handler.handleMessage(owner, codec.encodeControl(joinControl(7L, 3201L)));
+        handler.handleMessage(collaborator, codec.encodeControl(joinControl(7L, 3202L)));
+        DocumentBindingEnvelope envelope = new DocumentBindingEnvelope(1, DocumentBindingCommandType.BIND,
+                UUID.randomUUID(), DocumentBindingTargetType.DOCUMENT, 99L);
+        handler.handleMessage(owner, codec.encodeBinary(new DocumentWsBinaryFrame(DocumentWsFrameType.LINK,
+                UUID.randomUUID(), DocumentLinkCodec.encode(envelope, new byte[] {1, 2, 3}))));
+
+        verify(redisRepository).appendLinkPendingUpdate(any(DocumentPendingUpdate.class), any(DocumentPendingBinding.class));
+        verify(schedulePublisher).scheduleFlushLog(7L);
+        ArgumentCaptor<WebSocketMessage<?>> collaboratorMessages = ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(collaborator, times(4)).sendMessage(collaboratorMessages.capture());
+        assertThat(collaboratorMessages.getAllValues()).noneMatch(BinaryMessage.class::isInstance);
+    }
+
+    @Test
     void linkRedisFailureDoesNotAckOrBroadcast() throws Exception {
         WebSocketTestFixture fixture = websocketFixture(128);
         joinOwnerAndCollaborator(fixture);

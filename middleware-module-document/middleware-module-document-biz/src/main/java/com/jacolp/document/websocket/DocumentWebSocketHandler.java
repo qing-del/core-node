@@ -348,6 +348,8 @@ public class DocumentWebSocketHandler extends AbstractWebSocketHandler {
             throw new DocumentRoomAccessException("document no longer accepts LINK updates");
         }
         saveRoomMeta(room.documentId(), room.ownerUserId(), principal.userId(), now);
+        // 入队与运行时元数据都已成功，刷盘调度不能依赖 ACK 是否送达；否则只能等恢复扫描补偿。
+        scheduleFlushLog(room.documentId());
         if (!sendLinkAccepted(room.requireSession(session.getId()).session(), room.documentId(), frame, operations)) {
             // LINK 的 ACK 是发送者确认点；ACK 发送失败时不向其他会话广播，避免出现无法确认的实时变更。
             return;
@@ -356,7 +358,6 @@ public class DocumentWebSocketHandler extends AbstractWebSocketHandler {
         List<DocumentSessionContext> removedSessions = room.broadcast(codec.encodeBinary(new DocumentWsBinaryFrame(
                 DocumentWsFrameType.CRDT_UPDATE, frame.eventId(), link.rawYjsUpdate())), session.getId());
         cleanupRemovedSessions(room, removedSessions);
-        scheduleFlushLog(room.documentId());
     }
 
     /** 先缓存发送者最新的 Awareness 帧，再广播给同一 Room 的其他会话，不进入持久化链路。 */
