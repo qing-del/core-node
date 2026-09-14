@@ -110,6 +110,14 @@ jacolp:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+  elasticsearch:
+    uris:
+      - ${ELASTICSEARCH_URI:http://127.0.0.1:9200}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
+    index:
+      document: ${ELASTICSEARCH_DOCUMENT_INDEX:document}
+      file: ${ELASTICSEARCH_FILE_INDEX:file}
   mail:
     host: ${SMTP_HOST:smtp.example.com}
     port: ${SMTP_PORT:465}
@@ -178,6 +186,29 @@ jacolp:
     queue-type: ${AUDIO_QUEUE_TYPE:redis-stream}
   image:
     delete-image-task-time: 60  # 单位是分钟
+  yjs-merge-service:
+    base-url: ${YJS_MERGE_SERVICE_BASE_URL:http://127.0.0.1:3100}
+  document:
+    enabled: ${DOCUMENT_ENABLED:true}
+    # v0.7 file 投影、Canal 增量和历史身份迁移都必须显式开启。
+    file-index:
+      enabled: ${DOCUMENT_FILE_INDEX_ENABLED:false}
+      rebuild-on-start: ${DOCUMENT_FILE_INDEX_REBUILD_ON_START:false}
+      canal:
+        enabled: ${DOCUMENT_FILE_INDEX_CANAL_ENABLED:false}
+        host: ${CANAL_HOST:127.0.0.1}
+        port: ${CANAL_PORT:11111}
+        destination: ${CANAL_DESTINATION:example}
+        username: ${CANAL_USERNAME:}
+        password: ${CANAL_PASSWORD:}
+        filter: ${CANAL_FILTER:personal_saas[.].*}
+        batch-size: ${CANAL_BATCH_SIZE:100}
+        poll-delay-ms: ${CANAL_POLL_DELAY_MS:100}
+    node-migration:
+      run-on-start: ${DOCUMENT_NODE_MIGRATION_RUN_ON_START:false}
+      page-size: ${DOCUMENT_NODE_MIGRATION_PAGE_SIZE:100}
+      max-update-batch-bytes: ${DOCUMENT_NODE_MIGRATION_MAX_UPDATE_BATCH_BYTES:524288}
+      max-cas-retries: ${DOCUMENT_NODE_MIGRATION_MAX_CAS_RETRIES:3}
 
 aliyun:
   oss:

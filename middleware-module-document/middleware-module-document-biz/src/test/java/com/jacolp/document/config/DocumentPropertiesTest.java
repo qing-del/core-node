@@ -26,4 +26,31 @@ class DocumentPropertiesTest {
                     assertThat(properties.getSnapshot().getMaxBytes()).isEqualTo(4096);
                 });
     }
+
+    @Test
+    void bindsV07MigrationAndCanalRuntimeProperties() {
+        contextRunner.withPropertyValues(
+                "jacolp.document.node-migration.run-on-start=true",
+                "jacolp.document.node-migration.page-size=25",
+                "jacolp.document.node-migration.max-update-batch-bytes=65536",
+                "jacolp.document.node-migration.max-cas-retries=5",
+                "jacolp.document.file-index.canal.enabled=true",
+                "jacolp.document.file-index.canal.host=canal",
+                "jacolp.document.file-index.canal.port=11111",
+                "jacolp.document.file-index.canal.destination=example",
+                "jacolp.document.file-index.canal.filter=personal_saas[.].*")
+                .run(context -> {
+                    DocumentProperties documentProperties = context.getBean(DocumentProperties.class);
+                    FileIndexCanalProperties canalProperties = context.getBean(FileIndexCanalProperties.class);
+                    assertThat(documentProperties.getNodeMigration().isRunOnStart()).isTrue();
+                    assertThat(documentProperties.getNodeMigration().getPageSize()).isEqualTo(25);
+                    assertThat(documentProperties.getNodeMigration().getMaxUpdateBatchBytes()).isEqualTo(65536);
+                    assertThat(documentProperties.getNodeMigration().getMaxCasRetries()).isEqualTo(5);
+                    assertThat(canalProperties.isEnabled()).isTrue();
+                    assertThat(canalProperties.getHost()).isEqualTo("canal");
+                    assertThat(canalProperties.getPort()).isEqualTo(11111);
+                    assertThat(canalProperties.getDestination()).isEqualTo("example");
+                    assertThat(canalProperties.getFilter()).isEqualTo("personal_saas[.].*");
+                });
+    }
 }

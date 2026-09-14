@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 /** 仅在显式开启时执行一次 file 全量重建；正常启动不会清空或写入投影。 */
 @Component
+@ConditionalOnProperty(prefix = "jacolp.document.file-index", name = "enabled", havingValue = "true")
 @ConditionalOnProperty(prefix = "jacolp.document.file-index", name = "rebuild-on-start", havingValue = "true")
 public class FileIndexRebuildRunner implements ApplicationRunner {
 
