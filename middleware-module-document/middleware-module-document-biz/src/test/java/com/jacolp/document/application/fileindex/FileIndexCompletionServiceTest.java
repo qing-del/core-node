@@ -77,14 +77,16 @@ class FileIndexCompletionServiceTest {
 
         Query query = captured[0].query();
         assertThat(query.isBool()).isTrue();
-        assertThat(query.bool().filter()).hasSize(4);
+        assertThat(query.bool().filter()).hasSize(3);
         assertThat(query.bool().filter().getFirst().prefix().field()).isEqualTo("fileName.keyword");
         assertThat(query.bool().filter().getFirst().prefix().value()).isEqualTo("设计");
         assertThat(query.bool().filter().get(1).term().field()).isEqualTo("isDelete");
         assertThat(query.bool().filter().get(1).term().value().booleanValue()).isFalse();
         assertThat(query.bool().filter().get(2).bool().minimumShouldMatch()).isEqualTo("1");
         assertThat(query.bool().filter().get(2).bool().should()).hasSize(2);
-        assertThat(query.bool().filter().get(3).bool().should()).hasSize(2);
+        assertThat(query.bool().mustNot()).hasSize(1);
+        assertThat(query.bool().mustNot().getFirst().term().field()).isEqualTo("resourceType");
+        assertThat(query.bool().mustNot().getFirst().term().value().stringValue()).isEqualTo("IMAGE");
     }
 
     @Test

@@ -116,22 +116,26 @@ public class FileIndexCompletionService {
             throw new IllegalArgumentException("allowedTypes must not be empty");
         }
 
-        List<Query> typeQueries = allowedTypes.stream().sorted()
-                .map(type -> term(RESOURCE_TYPE, type.name())).toList();
         Query visibility = new Query.Builder().bool(bool -> bool
                 .should(term(IS_PUBLIC, true))
                 .should(term(VISIBLE_USER_IDS, String.valueOf(userId)))
-                .minimumShouldMatch("1")).build();
-        Query types = new Query.Builder().bool(bool -> bool
-                .should(typeQueries)
                 .minimumShouldMatch("1")).build();
         List<Query> filters = new ArrayList<>();
         filters.add(new Query.Builder().prefix(prefix -> prefix.field(FILE_NAME_KEYWORD)
                 .value(keyword == null ? "" : keyword)).build());
         filters.add(term(IS_DELETE, false));
         filters.add(visibility);
-        filters.add(types);
-        return new Query.Builder().bool(bool -> bool.filter(filters)).build();
+        List<Query> excludedTypes = EnumSet.allOf(FileIndexResourceType.class).stream()
+                .filter(type -> !allowedTypes.contains(type))
+                .sorted()
+                .map(type -> term(RESOURCE_TYPE, type.name())).toList();
+        return new Query.Builder().bool(bool -> {
+            bool.filter(filters);
+            if (!excludedTypes.isEmpty()) {
+                bool.mustNot(excludedTypes);
+            }
+            return bool;
+        }).build();
     }
 
     private static Query term(String field, String value) {
