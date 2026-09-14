@@ -2,11 +2,14 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import {
   InvalidMergeRequestError,
+  migrateYjsNodeIdentity,
+  NodeIdentityMigrationError,
   mergeYjsState,
   type YjsMergeRequest,
 } from './merge.js';
 
 const MERGE_PATH = '/internal/yjs/merge';
+const NODE_IDENTITY_MIGRATION_PATH = '/internal/yjs/node-identity/migrate';
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 /** 创建只提供内部 Yjs 合并接口的无状态 HTTP 服务。 */
@@ -23,18 +26,25 @@ export function createMergeServer(): Server {
 
 /** 只接受固定 POST 路径，并将请求校验错误转换为 400。 */
 async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
-  if (request.method !== 'POST' || request.url !== MERGE_PATH) {
+  if (request.method !== 'POST'
+    || (request.url !== MERGE_PATH && request.url !== NODE_IDENTITY_MIGRATION_PATH)) {
     writeJson(response, 404, { error: 'not found' });
     return;
   }
 
   try {
     const body = await readJsonBody(request);
-    const result = mergeYjsState(body);
+    const result = request.url === NODE_IDENTITY_MIGRATION_PATH
+      ? migrateYjsNodeIdentity(body)
+      : mergeYjsState(body);
     writeJson(response, 200, result);
   } catch (error) {
     if (error instanceof InvalidMergeRequestError) {
       writeJson(response, 400, { error: error.message });
+      return;
+    }
+    if (error instanceof NodeIdentityMigrationError) {
+      writeJson(response, 422, { error: error.message });
       return;
     }
     throw error;

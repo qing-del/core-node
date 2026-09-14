@@ -3,7 +3,12 @@ import test from 'node:test';
 
 import * as Y from 'yjs';
 
-import { InvalidMergeRequestError, mergeYjsState } from '../merge.js';
+import {
+  InvalidMergeRequestError,
+  migrateYjsNodeIdentity,
+  NodeIdentityMigrationError,
+  mergeYjsState,
+} from '../merge.js';
 
 test('duplicate updates merge to the same Yjs document state', () => {
   const source = new Y.Doc();
@@ -89,6 +94,82 @@ test('invalid base64 is rejected before it reaches Yjs', () => {
   );
 });
 
+test('node identity migration fills registered nodes and preserves unregistered nodes', () => {
+  const source = new Y.Doc();
+  const content = source.getXmlFragment('content');
+  const paragraph = new Y.XmlElement('paragraph');
+  paragraph.insert(0, [new Y.XmlText('hello')]);
+  const heading = new Y.XmlElement('heading');
+  heading.setAttribute('nodeId', '550e8400-e29b-41d4-a716-446655440000');
+  setNodeVersion(heading, 3);
+  const list = new Y.XmlElement('bulletList');
+  list.setAttribute('nodeId', 'not-registered');
+  content.insert(0, [paragraph, heading, list]);
+
+  const result = migrateYjsNodeIdentity({
+    baseState: toBase64(Y.encodeStateAsUpdate(source)),
+    updates: [],
+  });
+
+  const migrated = readXml(result.mergedState);
+  const migratedParagraph = migrated.getXmlFragment('content').firstChild as Y.XmlElement;
+  const migratedHeading = migratedParagraph.nextSibling as Y.XmlElement;
+  const migratedList = migratedHeading.nextSibling as Y.XmlElement;
+  assert.equal(result.changed, true);
+  assert.equal(result.registeredNodeCount, 2);
+  assert.match(String(migratedParagraph.getAttribute('nodeId')), UUID_PATTERN);
+  assert.equal(migratedParagraph.getAttribute('nodeVersion'), 0);
+  assert.equal(migratedHeading.getAttribute('nodeId'), '550e8400-e29b-41d4-a716-446655440000');
+  assert.equal(migratedHeading.getAttribute('nodeVersion'), 3);
+  assert.equal(migratedList.getAttribute('nodeId'), 'not-registered');
+});
+
+test('resource references use refId and receive the same initial version contract', () => {
+  const source = new Y.Doc();
+  const reference = new Y.XmlElement('resourceReference');
+  reference.setAttribute('refId', '550e8400-e29b-41d4-a716-446655440001');
+  source.getXmlFragment('content').insert(0, [reference]);
+
+  const result = migrateYjsNodeIdentity({
+    baseState: toBase64(Y.encodeStateAsUpdate(source)),
+    updates: [],
+  });
+  const migrated = readXml(result.mergedState).getXmlFragment('content').firstChild as Y.XmlElement;
+
+  assert.equal(migrated.getAttribute('nodeId'), '550e8400-e29b-41d4-a716-446655440001');
+  assert.equal(migrated.getAttribute('nodeVersion'), 0);
+});
+
+test('node identity migration is idempotent', () => {
+  const source = new Y.Doc();
+  const paragraph = new Y.XmlElement('paragraph');
+  source.getXmlFragment('content').insert(0, [paragraph]);
+  const first = migrateYjsNodeIdentity({
+    baseState: toBase64(Y.encodeStateAsUpdate(source)),
+    updates: [],
+  });
+  const second = migrateYjsNodeIdentity({ baseState: first.mergedState, updates: [] });
+
+  assert.equal(first.changed, true);
+  assert.equal(second.changed, false);
+  assert.equal(second.mergedState, first.mergedState);
+});
+
+test('resource reference identity mismatch fails without silent overwrite', () => {
+  const source = new Y.Doc();
+  const reference = new Y.XmlElement('resourceReference');
+  reference.setAttribute('refId', '550e8400-e29b-41d4-a716-446655440002');
+  reference.setAttribute('nodeId', '550e8400-e29b-41d4-a716-446655440003');
+  source.getXmlFragment('content').insert(0, [reference]);
+
+  assert.throws(
+    () => migrateYjsNodeIdentity({ baseState: toBase64(Y.encodeStateAsUpdate(source)), updates: [] }),
+    NodeIdentityMigrationError,
+  );
+});
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function toBase64(update: Uint8Array): string {
   return Buffer.from(update).toString('base64');
 }
@@ -97,4 +178,15 @@ function readText(mergedState: string): string {
   const document = new Y.Doc();
   Y.applyUpdate(document, Buffer.from(mergedState, 'base64'));
   return document.getText('content').toString();
+}
+
+function readXml(mergedState: string): Y.Doc {
+  const document = new Y.Doc();
+  Y.applyUpdate(document, Buffer.from(mergedState, 'base64'));
+  return document;
+}
+
+function setNodeVersion(node: Y.XmlElement, value: number): void {
+  (node as unknown as Y.XmlElement<{ [key: string]: string | number | null }>)
+    .setAttribute('nodeVersion', value);
 }
