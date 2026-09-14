@@ -12,6 +12,9 @@ public interface DocumentUserMappingMapper {
     /** 查询指定文档的全部授权记录，包含已撤销记录。 */
     List<DocumentUserMappingDO> selectByDocumentId(@Param("documentId") Long documentId);
 
+    /** 批量读取多个文档当前生效的 READ/WRITE 授权，供 file 全量重建一次性组装可见用户。 */
+    List<DocumentUserMappingDO> selectEnabledReadableByDocumentIds(@Param("documentIds") List<Long> documentIds);
+
     /** 查询指定文档用户的授权记录，不过滤 enabled。 */
     DocumentUserMappingDO selectByDocumentIdAndUserId(@Param("documentId") Long documentId,
                                                        @Param("userId") Long userId);

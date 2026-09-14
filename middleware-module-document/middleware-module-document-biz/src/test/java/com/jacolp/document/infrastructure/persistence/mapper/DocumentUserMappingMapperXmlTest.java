@@ -21,6 +21,9 @@ class DocumentUserMappingMapperXmlTest {
 
         assertThat(xml)
                 .contains("id=\"selectByDocumentId\"")
+                .contains("id=\"selectEnabledReadableByDocumentIds\"")
+                .contains("permission IN ('READ', 'WRITE')")
+                .contains("document_id IN")
                 .contains("id=\"selectByDocumentIdAndUserId\"")
                 .contains("id=\"selectEnabledByDocumentIdAndUserId\"")
                 .contains("id=\"upsertByDocumentOwner\"")

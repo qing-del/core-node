@@ -21,6 +21,18 @@
         ORDER BY user_id ASC
     </select>
 
+    <select id="selectEnabledReadableByDocumentIds" resultMap="DocumentUserMappingMap">
+        SELECT document_id, user_id, permission, enabled, create_time, update_time
+        FROM biz_document_user
+        WHERE enabled = 1
+          AND permission IN ('READ', 'WRITE')
+          AND document_id IN
+          <foreach collection="documentIds" item="documentId" open="(" separator="," close=")">
+              #{documentId}
+          </foreach>
+        ORDER BY document_id ASC, user_id ASC
+    </select>
+
     <select id="selectByDocumentIdAndUserId" resultMap="DocumentUserMappingMap">
         SELECT document_id, user_id, permission, enabled, create_time, update_time
         FROM biz_document_user
