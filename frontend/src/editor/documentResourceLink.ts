@@ -1,7 +1,8 @@
 import * as Y from 'yjs'
 import { Extension } from '@tiptap/core'
 import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
-import { NodeSelection, Plugin, PluginKey, type EditorState } from '@tiptap/pm/state'
+import { NodeSelection, Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state'
+import { dropPoint } from '@tiptap/pm/transform'
 import type { EditorView } from '@tiptap/pm/view'
 import {
   DocumentBindingCommandType,
@@ -393,31 +394,62 @@ export function createDocumentResourceLinkExtension(
 
             const targets = getDeletionTargets(view.state, event.key)
             if (targets.length === 0) return false
-            if (targets.length > 1) {
-              event.preventDefault()
-              options.onActionBlocked('一次只能处理一个文档引用，请逐个删除或解绑。')
-              return true
-            }
-
-            const intent = createUnbindIntent(targets[0].attributes)
-            // 历史空属性占位节点按普通 CLIENT_UPDATE 删除。
-            if (!intent) return false
-            event.preventDefault()
             const deletionFrom = view.state.selection.empty ? targets[0].from : view.state.selection.from
             const deletionTo = view.state.selection.empty ? targets[0].to : view.state.selection.to
-            const transaction = view.state.tr
-              .delete(deletionFrom, deletionTo)
-              .setMeta(DOCUMENT_LINK_TRANSACTION_META, true)
-            options.ydoc.transact(() => view.dispatch(transaction), intent)
-            return true
+            return dispatchReferenceReplacement(
+              view,
+              options,
+              targets,
+              () => view.state.tr.delete(deletionFrom, deletionTo),
+              '一次只能处理一个文档引用，请逐个删除或解绑。'
+            )
+          },
+
+          /** 选中原子引用后直接输入文本会替换节点，必须同步生成 UNBIND。 */
+          handleTextInput: (view, from, to, _text, deflt) => {
+            if (!options.isEditable()) return false
+            return dispatchReferenceReplacement(
+              view,
+              options,
+              getBoundReferencesInRange(view.state, from, to),
+              deflt,
+              '输入会同时删除多个文档引用，请先逐个解绑。'
+            )
+          },
+
+          /** 接管剪切的删除事务，同时保留 ProseMirror 原有的 HTML/纯文本剪贴板内容。 */
+          handleDOMEvents: {
+            cut: (view, event: ClipboardEvent) => {
+              if (!options.isEditable() || view.state.selection.empty) return false
+              const targets = getBoundReferencesInRange(view.state,
+                view.state.selection.from, view.state.selection.to)
+              if (targets.length === 0) return false
+              if (targets.length > 1) {
+                event.preventDefault()
+                options.onActionBlocked('剪切会同时删除多个文档引用，请先逐个解绑。')
+                return true
+              }
+              // 当前浏览器均提供 clipboardData；不可写时交给默认剪切，避免损坏剪贴板行为。
+              if (!event.clipboardData) return false
+              const { dom, text } = view.serializeForClipboard(view.state.selection.content())
+              event.preventDefault()
+              event.clipboardData.clearData()
+              event.clipboardData.setData('text/html', dom.innerHTML)
+              event.clipboardData.setData('text/plain', text)
+              return dispatchReferenceReplacement(
+                view,
+                options,
+                targets,
+                () => view.state.tr.deleteSelection(),
+                '剪切会同时删除多个文档引用，请先逐个解绑。'
+              )
+            }
           },
 
           handlePaste: (view, event, slice) => {
             if (!options.isEditable()) return false
 
-            const targets = view.state.selection.empty
-              ? []
-              : getBoundReferencesInRange(view.state, view.state.selection.from, view.state.selection.to)
+            const targets = selectionBoundReferences(view.state)
             if (targets.length > 1) {
               event.preventDefault()
               options.onActionBlocked('粘贴会同时删除多个已绑定引用，请先逐个解绑。')
@@ -429,8 +461,7 @@ export function createDocumentResourceLinkExtension(
               event.preventDefault()
               options.onActionBlocked('一次只能粘贴一个文档引用，多个引用已转为普通文本。')
               const plainSlice = flattenResourceReferencesToText(slice)
-              const intent = targets.length === 1 ? createUnbindIntent(targets[0].attributes) : undefined
-              return dispatchPaste(view, plainSlice, options, intent ?? undefined)
+              return dispatchPaste(view, plainSlice, options, targets)
             }
 
             if (references.length === 1) {
@@ -449,24 +480,46 @@ export function createDocumentResourceLinkExtension(
                 event.preventDefault()
                 try {
                   const intent = createBindIntent(attributes.refId, targetId)
-                  return dispatchPaste(view, remapped, options, intent)
+                  return dispatchPaste(view, remapped, options, [], intent)
                 } catch {
                   // 非法导入节点降级为普通文本，不发送 malformed LINK。
                 }
               }
               event.preventDefault()
               options.onActionBlocked('粘贴的文档引用无有效目标，已转为普通文本。')
-              return dispatchPaste(view, flattenResourceReferencesToText(remapped), options)
+              return dispatchPaste(view, flattenResourceReferencesToText(remapped), options, [])
             }
 
             if (targets.length === 1) {
-              const intent = createUnbindIntent(targets[0].attributes)
-              if (intent) {
-                event.preventDefault()
-                return dispatchPaste(view, slice, options, intent)
-              }
+              event.preventDefault()
+              return dispatchPaste(view, slice, options, targets)
             }
             return false
+          },
+
+          /** 外部拖入引用按粘贴策略重映射并 BIND；文档内移动保留原 refId 和关系。 */
+          handleDrop: (view, event, slice, moved) => {
+            if (!options.isEditable() || moved) return false
+            const references = getResourceReferenceAttributesInFragment(slice.content)
+            if (references.length === 0) return false
+            event.preventDefault()
+            if (references.length > 1) {
+              options.onActionBlocked('一次只能拖入一个文档引用，多个引用已转为普通文本。')
+              return dispatchDrop(view, event, flattenResourceReferencesToText(slice), options)
+            }
+            const remapped = remapResourceReferenceIdsInSlice(slice, options.getExistingRefIds())
+            const [attributes] = getResourceReferenceAttributesInFragment(remapped.content)
+            const targetId = attributes ? resourceIdToTargetId(attributes.resourceId) : null
+            if (attributes && attributes.resourceType === DOCUMENT_RESOURCE_TYPE
+                && targetId !== null && attributes.refId) {
+              try {
+                return dispatchDrop(view, event, remapped, options, createBindIntent(attributes.refId, targetId))
+              } catch {
+                // 降级为普通文本，不能让格式错误的拖入内容生成 malformed LINK。
+              }
+            }
+            options.onActionBlocked('拖入的文档引用无有效目标，已转为普通文本。')
+            return dispatchDrop(view, event, flattenResourceReferencesToText(remapped), options)
           }
         }
       })]
@@ -474,14 +527,78 @@ export function createDocumentResourceLinkExtension(
   })
 }
 
+/** 返回当前选区中会被替换的有效文档引用。 */
+function selectionBoundReferences(state: EditorState): DocumentDeletionTarget[] {
+  return state.selection.empty
+    ? []
+    : getBoundReferencesInRange(state, state.selection.from, state.selection.to)
+}
+
+/** 将一个单引用替换事务包装为 UNBIND LINK；多引用则保持正文不变。 */
+function dispatchReferenceReplacement(
+  view: EditorView,
+  options: DocumentResourceLinkExtensionOptions,
+  targets: DocumentDeletionTarget[],
+  createTransaction: () => Transaction,
+  blockedMessage: string
+): boolean {
+  if (targets.length === 0) return false
+  if (targets.length > 1) {
+    options.onActionBlocked(blockedMessage)
+    return true
+  }
+  const intent = createUnbindIntent(targets[0].attributes)
+  // 历史空属性占位节点按普通 CLIENT_UPDATE 处理。
+  if (!intent) return false
+  const transaction = createTransaction().setMeta(DOCUMENT_LINK_TRANSACTION_META, true)
+  options.ydoc.transact(() => view.dispatch(transaction), intent)
+  return true
+}
+
+/** 对粘贴内容执行替换；若原选区含一个引用，则以 UNBIND 包装整个替换事务。 */
 function dispatchPaste(
   view: EditorView,
   slice: Slice,
   options: DocumentResourceLinkExtensionOptions,
+  targets: DocumentDeletionTarget[],
   intent?: DocumentLinkIntent
 ): boolean {
+  if (intent) {
+    const transaction = view.state.tr
+      .replaceSelection(slice)
+      .setMeta(DOCUMENT_LINK_TRANSACTION_META, true)
+    options.ydoc.transact(() => view.dispatch(transaction), intent)
+    return true
+  }
+  return dispatchReferenceReplacement(
+    view,
+    options,
+    targets,
+    () => view.state.tr.replaceSelection(slice),
+    '粘贴会同时删除多个已绑定引用，请先逐个解绑。'
+  ) || dispatchPlainPaste(view, slice)
+}
+
+/** 不会删除有效引用时走普通粘贴事务。 */
+function dispatchPlainPaste(view: EditorView, slice: Slice): boolean {
+  view.dispatch(view.state.tr.replaceSelection(slice).setMeta(DOCUMENT_LINK_TRANSACTION_META, false))
+  return true
+}
+
+/** 在鼠标落点插入拖入 Slice；dropPoint 与 ProseMirror 默认拖放保持同一合法位置策略。 */
+function dispatchDrop(
+  view: EditorView,
+  event: DragEvent,
+  slice: Slice,
+  options: DocumentResourceLinkExtensionOptions,
+  intent?: DocumentLinkIntent
+): boolean {
+  const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY })
+  if (!coordinates) return false
+  const position = dropPoint(view.state.doc, coordinates.pos, slice)
+  if (position === null) return false
   const transaction = view.state.tr
-    .replaceSelection(slice)
+    .replaceRange(position, position, slice)
     .setMeta(DOCUMENT_LINK_TRANSACTION_META, Boolean(intent))
   if (intent) {
     options.ydoc.transact(() => view.dispatch(transaction), intent)

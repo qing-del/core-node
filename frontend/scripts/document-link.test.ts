@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as Y from 'yjs'
 import { Fragment, Schema, Slice } from '@tiptap/pm/model'
-import { EditorState, TextSelection } from '@tiptap/pm/state'
+import { EditorState, NodeSelection, TextSelection } from '@tiptap/pm/state'
 import {
   createDocumentWsControl,
   decodeDocumentBindingEnvelope,
@@ -23,6 +23,7 @@ import { DocumentCollaborationClient } from '../src/collaboration/DocumentCollab
 import type { DocumentLinkIntent } from '../src/collaboration/documentProtocol.ts'
 import {
   countResourceReferences,
+  createDocumentResourceLinkExtension,
   createBindIntent,
   createDocumentReferenceAttributes,
   createUnbindIntent,
@@ -667,3 +668,116 @@ test('keeps LinkIntent as the Yjs transaction origin for exactly one editor acti
   assert.equal(result, true)
   assert.deepEqual(origins, [intent])
 })
+
+test('wraps typed replacement and cut of one valid reference in UNBIND transactions', () => {
+  const schema = createTestSchema()
+  const reference = resourceReference(schema, REF_ID, '42')
+  let state = EditorState.create({
+    schema,
+    doc: schema.node('doc', null, [schema.node('paragraph', null, [reference])]),
+    selection: NodeSelection.create(schema.node('doc', null, [schema.node('paragraph', null, [reference])]), 1)
+  })
+  // NodeSelection must belong to the exact document held by EditorState.
+  state = EditorState.create({ schema, doc: state.doc, selection: NodeSelection.create(state.doc, 1) })
+  const ydoc = new Y.Doc()
+  const origins: unknown[] = []
+  ydoc.on('beforeTransaction', transaction => origins.push(transaction.origin))
+  const view = fakeEditorView(() => state, transaction => { state = state.apply(transaction) })
+  const blocked: string[] = []
+  const props = resourceLinkProps(ydoc, blocked)
+
+  assert.equal(props.handleTextInput?.(view, 1, 2, '替换', () => state.tr.insertText('替换', 1, 2)), true)
+  assert.equal(state.doc.textContent, '替换')
+  assert.equal((origins[0] as DocumentLinkIntent).commandType, DocumentBindingCommandType.UNBIND)
+  assert.equal((origins[0] as DocumentLinkIntent).refId, REF_ID)
+
+  const cutReference = resourceReference(schema, REF_ID, '42')
+  state = EditorState.create({
+    schema,
+    doc: schema.node('doc', null, [schema.node('paragraph', null, [cutReference])]),
+    selection: NodeSelection.create(schema.node('doc', null, [schema.node('paragraph', null, [cutReference])]), 1)
+  })
+  state = EditorState.create({ schema, doc: state.doc, selection: NodeSelection.create(state.doc, 1) })
+  const clipboard = new Map<string, string>()
+  let prevented = false
+  const cut = props.handleDOMEvents?.cut as ((view: unknown, event: unknown) => boolean)
+  assert.equal(cut(view, {
+    clipboardData: {
+      clearData: () => clipboard.clear(),
+      setData: (type: string, value: string) => clipboard.set(type, value)
+    },
+    preventDefault: () => { prevented = true }
+  }), true)
+  assert.equal(state.doc.textContent, '')
+  assert.equal((origins[1] as DocumentLinkIntent).commandType, DocumentBindingCommandType.UNBIND)
+  assert.equal(prevented, true)
+  assert.equal(clipboard.get('text/plain'), '目标文档')
+  assert.deepEqual(blocked, [])
+})
+
+test('blocks multi-reference replacement and remaps a copied drop as BIND without unbinding a move', () => {
+  const schema = createTestSchema()
+  const first = resourceReference(schema, REF_ID, '42')
+  const second = resourceReference(schema, '123e4567-e89b-12d3-a456-426614174001', '43')
+  const doc = schema.node('doc', null, [schema.node('paragraph', null, [first, second])])
+  let state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 1, 3) })
+  const ydoc = new Y.Doc()
+  const origins: unknown[] = []
+  ydoc.on('beforeTransaction', transaction => origins.push(transaction.origin))
+  const view = fakeEditorView(() => state, transaction => { state = state.apply(transaction) })
+  const blocked: string[] = []
+  const props = resourceLinkProps(ydoc, blocked)
+
+  assert.equal(props.handleTextInput?.(view, 1, 3, '替换', () => state.tr.insertText('替换', 1, 3)), true)
+  assert.equal(state.doc.child(0).childCount, 2)
+  assert.equal(origins.length, 0)
+  assert.match(blocked[0], /多个文档引用/)
+
+  state = EditorState.create({ schema, doc: schema.node('doc', null, [schema.node('paragraph', null, [])]) })
+  const copiedSlice = new Slice(Fragment.from(resourceReference(schema, REF_ID, '42')), 0, 0)
+  const drop = props.handleDrop!
+  assert.equal(drop(view, dragEvent(1), copiedSlice, true), false)
+  assert.equal(origins.length, 0)
+  assert.equal(drop(view, dragEvent(1), copiedSlice, false), true)
+  assert.equal((origins[0] as DocumentLinkIntent).commandType, DocumentBindingCommandType.BIND)
+  assert.notEqual((origins[0] as DocumentLinkIntent).refId, REF_ID)
+})
+
+function resourceReference(schema: Schema, refId: string, resourceId: string) {
+  return schema.node('resourceReference', {
+    refId,
+    resourceType: 'DOCUMENT',
+    resourceId,
+    displayText: '目标文档',
+    alias: null
+  })
+}
+
+function resourceLinkProps(ydoc: Y.Doc, blocked: string[]) {
+  const extension = createDocumentResourceLinkExtension({
+    ydoc,
+    isEditable: () => true,
+    getExistingRefIds: () => new Set([REF_ID]),
+    onTriggerChange: () => {},
+    onTriggerKeyDown: () => false,
+    onResourceReferenceSelectionChange: () => {},
+    onActionBlocked: message => blocked.push(message)
+  })
+  return extension.config.addProseMirrorPlugins!.call(extension)[0].props
+}
+
+function fakeEditorView(
+  readState: () => EditorState,
+  dispatch: (transaction: ReturnType<EditorState['tr']['insertText']>) => void
+) {
+  return {
+    get state() { return readState() },
+    dispatch,
+    serializeForClipboard: () => ({ dom: { innerHTML: '<span>目标文档</span>' }, text: '目标文档', slice: null }),
+    posAtCoords: () => ({ pos: 1, inside: -1 })
+  } as unknown as Parameters<NonNullable<ReturnType<typeof resourceLinkProps>['handleTextInput']>>[0]
+}
+
+function dragEvent(clientX: number): DragEvent {
+  return { clientX, clientY: 0, preventDefault: () => {} } as DragEvent
+}
