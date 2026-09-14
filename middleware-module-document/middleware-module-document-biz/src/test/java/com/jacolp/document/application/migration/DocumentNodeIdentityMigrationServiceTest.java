@@ -88,7 +88,8 @@ class DocumentNodeIdentityMigrationServiceTest {
         assertThat(outcome.status()).isEqualTo(DocumentNodeIdentityMigrationOutcome.Status.MIGRATED);
         assertThat(outcome.objectKey()).isEqualTo("document/7/state/winner.bin");
         verify(yjsMergeClient, org.mockito.Mockito.times(2)).migrateNodeIdentity(isNull(), anyList());
-        verify(opLogMapper, never()).deleteByDocumentIdThroughId(anyLong(), anyLong());
+        verify(snapshotStorage).delete("document/7/state/loser.bin");
+        verify(opLogMapper).deleteByDocumentIdThroughId(7L, 5L);
     }
 
     @Test

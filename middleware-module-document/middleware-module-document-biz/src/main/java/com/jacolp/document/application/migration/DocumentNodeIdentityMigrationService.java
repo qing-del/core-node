@@ -125,6 +125,8 @@ public class DocumentNodeIdentityMigrationService {
                         DocumentNodeIdentityMigrationOutcome.Status.MIGRATED, state.cutoffLogId(), objectKey);
             }
 
+            discardUnreferencedSnapshot(documentId, objectKey);
+
             log.info("document node identity migration lost snapshot CAS documentId={} attempt={}/{}", documentId,
                     attempt, maxAttempts);
         }
@@ -227,6 +229,16 @@ public class DocumentNodeIdentityMigrationService {
         } catch (RuntimeException exception) {
             log.warn("document node identity migration snapshot advanced but log cleanup failed documentId={} "
                             + "cutoffLogId={} reason={}", documentId, cutoffLogId, exception.getMessage());
+        }
+    }
+
+    /** CAS 失败时删除本轮写出的孤儿快照；删除失败不掩盖 CAS 结果，交给运维后续清理。 */
+    private void discardUnreferencedSnapshot(long documentId, String objectKey) {
+        try {
+            snapshotStorage.delete(objectKey);
+        } catch (RuntimeException exception) {
+            log.warn("document node identity migration orphan snapshot cleanup failed documentId={} objectKey={} "
+                            + "reason={}", documentId, objectKey, exception.getMessage());
         }
     }
 

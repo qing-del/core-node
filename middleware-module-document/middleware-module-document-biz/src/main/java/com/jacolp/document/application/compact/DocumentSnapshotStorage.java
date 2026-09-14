@@ -63,6 +63,20 @@ public class DocumentSnapshotStorage {
         }
     }
 
+    /** 删除一次 CAS 失败后未被任何文档指针引用的快照对象。 */
+    public void delete(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            throw new IllegalArgumentException("objectKey must not be blank");
+        }
+        try {
+            minioObjectStorage.delete(bucket(), objectKey);
+        } catch (DocumentSnapshotStorageException exception) {
+            throw exception;
+        } catch (MinioStorageException exception) {
+            throw new DocumentSnapshotStorageException("could not delete document snapshot", exception);
+        }
+    }
+
     /** 解析文档逻辑桶名，并把配置错误转换为文档快照领域异常。 */
     private String bucket() {
         try {
