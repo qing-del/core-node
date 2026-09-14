@@ -3,6 +3,7 @@ package com.jacolp.middleware.authorization;
 import com.jacolp.config.BusinessRouteScopeCatalogConfiguration;
 import com.jacolp.common.security.oauth2.authorization.BusinessRouteAuthorizationEntry;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
@@ -31,6 +32,7 @@ class BusinessRouteScopeCatalogConfigurationTest {
             "com.jacolp.audit.application.controller.admin.ImageAuditReviewCompatibilityController",
             "com.jacolp.document.controller.DocumentController",
             "com.jacolp.document.controller.DocumentShareLinkRedemptionController",
+            "com.jacolp.document.controller.FileIndexCompletionController",
             "com.jacolp.media.controller.AdminImageController",
             "com.jacolp.media.controller.UserImageController",
             "com.jacolp.media.controller.UserImageAuditApplicationController",
@@ -57,11 +59,11 @@ class BusinessRouteScopeCatalogConfigurationTest {
         Map<String, Long> policyRoutes = BusinessRouteScopeCatalogConfiguration.entries().stream()
                 .collect(Collectors.groupingBy(BusinessRouteScopeCatalogConfigurationTest::route, Collectors.counting()));
 
-        assertThat(mappedRoutes).hasSize(132);
+        assertThat(mappedRoutes).hasSize(133);
         assertThat(mappedRoutes).containsAll(EXCEPTIONS);
         assertThat(EXCEPTIONS).hasSize(4);
-        assertThat(protectedRoutes).hasSize(128);
-        assertThat(policyRoutes).hasSize(128);
+        assertThat(protectedRoutes).hasSize(129);
+        assertThat(policyRoutes).hasSize(129);
         assertThat(policyRoutes.keySet()).containsExactlyInAnyOrderElementsOf(protectedRoutes);
         assertThat(policyRoutes.values()).allMatch(count -> count == 1L);
     }
@@ -78,23 +80,35 @@ class BusinessRouteScopeCatalogConfigurationTest {
     }
 
     @Test
+    void fileCompletionRouteAcceptsAnyFileReadScope() {
+        BusinessRouteAuthorizationEntry entry = BusinessRouteScopeCatalogConfiguration.entries().stream()
+                .filter(candidate -> candidate.method() == HttpMethod.GET
+                        && candidate.pathPattern().equals("/user/file/completion"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(entry.anyRequiredScope()).isTrue();
+        assertThat(entry.requiredScopes()).containsExactlyInAnyOrder(
+                "note:read", "media:read", "document:read");
+    }
+
+    @Test
     void documentationMatchesTheExecutableCatalogueCountsAndCoreScopeRules() throws IOException {
         String document = Files.readString(repositoryRoot().resolve(
                 "static/document/security/phase5-business-route-scope-catalog.md"));
         long documentedEntries = document.lines().filter(line -> line.matches("\\| \\d+ \\|.*")).count();
 
-        assertThat(documentedEntries).isEqualTo(128);
+        assertThat(documentedEntries).isEqualTo(129);
         assertThat(document.lines().filter(line -> line.startsWith("## `/user/**`")).toList())
-                .containsExactly("## `/user/**`：user client（83 bearer routes）");
+                .containsExactly("## `/user/**`：user client（84 bearer routes）");
         assertThat(document.lines().filter(line -> line.startsWith("## `/admin/**`")).toList())
                 .containsExactly("## `/admin/**`：admin client（45 bearer routes）");
-        assertThat(document).contains("132 个", "87 个 user", "45 个 admin", "128 个是 bearer", "4 个是下文明确排除");
+        assertThat(document).contains("133 个", "88 个 user", "45 个 admin", "129 个是 bearer", "4 个是下文明确排除");
         assertThat(document).contains("`GET /user/note/source/{id}`", "`audit:write`", "`audit:manage`",
                 "`note:read` + `media:read`", "`note:write` + `media:read`", "`document:read`",
                 "`document:write`", "`GET /user/document/{documentId}/users`",
                 "`PUT /user/document/{documentId}/users/{userId}`",
                 "`DELETE /user/document/{documentId}/users/{userId}`",
-                "`POST /user/document/share-links/{code}/redeem`");
+                "`POST /user/document/share-links/{code}/redeem`", "`GET /user/file/completion`");
     }
 
     private static Set<String> mappedBusinessRoutes() throws Exception {

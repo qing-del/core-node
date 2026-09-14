@@ -78,6 +78,7 @@ public class BusinessRouteScopeCatalogConfiguration {
                 user("GET /user/document/{documentId}/share-links document:read"),
                 user("DELETE /user/document/{documentId}/share-links/{shareLinkId} document:write"),
                 userAny("POST /user/document/share-links/{code}/redeem document:read|document:write"),
+                userAny("GET /user/file/completion note:read|media:read|document:read"),
                 user("PATCH /user/document/{documentId}/meta document:write"),
                 user("DELETE /user/document/{documentId} document:write"),
                 // user notes
