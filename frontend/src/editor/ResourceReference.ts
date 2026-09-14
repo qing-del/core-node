@@ -1,10 +1,12 @@
 import { Node, mergeAttributes } from '@tiptap/core'
+import type { FileResourceType } from '@/api/files'
+import type { CrdtNodeIdentityAttributes } from './crdtNodeIdentity'
 
-export interface ResourceReferenceAttributes {
+export interface ResourceReferenceAttributes extends CrdtNodeIdentityAttributes {
   /** 引用节点自身的稳定 ID；新建、复制和导入时必须使用新的 UUID。 */
   refId: string
-  /** 被引用资源的类型；文档绑定协议使用大写 DOCUMENT。 */
-  resourceType: string | null
+  /** 被引用资源的类型；绑定协议支持 DOCUMENT、NOTE 和 IMAGE。 */
+  resourceType: FileResourceType | null
   /** 被引用资源的业务 ID；以十进制字符串保存，避免前端 number 精度丢失。 */
   resourceId: string | null
   /** 编辑器中展示的引用文本；example: {@code '项目设计文档'} */
@@ -33,6 +35,17 @@ export const ResourceReference = Node.create({
         default: null,
         parseHTML: element => element.getAttribute('data-ref-id') || null
       },
+      nodeId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-node-id') || null
+      },
+      nodeVersion: {
+        default: 0,
+        parseHTML: element => {
+          const value = Number(element.getAttribute('data-node-version'))
+          return Number.isSafeInteger(value) && value >= 0 ? value : 0
+        }
+      },
       resourceType: {
         default: null,
         parseHTML: element => element.getAttribute('data-resource-type') || null
@@ -59,18 +72,19 @@ export const ResourceReference = Node.create({
 
   /** 将引用属性渲染为稳定的 data 属性和可读文本。 */
   renderHTML({ HTMLAttributes }) {
-    const attributes = HTMLAttributes as ResourceReferenceAttributes
+    const attributes = HTMLAttributes as unknown as Partial<ResourceReferenceAttributes>
     return ['span', mergeAttributes(
       {
         'data-document-resource-ref': '',
         'data-ref-id': attributes.refId,
+        'data-node-id': attributes.nodeId,
+        'data-node-version': attributes.nodeVersion,
         'data-resource-type': attributes.resourceType,
         'data-resource-id': attributes.resourceId,
         'data-display-text': attributes.displayText,
         'data-alias': attributes.alias,
         class: 'document-resource-reference'
-      },
-      HTMLAttributes
+      }
     ), attributes.alias || attributes.displayText || '未命名引用']
   }
 })

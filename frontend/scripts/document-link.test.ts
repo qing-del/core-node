@@ -22,10 +22,16 @@ import {
 import { DocumentCollaborationClient } from '../src/collaboration/DocumentCollaborationClient.ts'
 import type { DocumentLinkIntent } from '../src/collaboration/documentProtocol.ts'
 import {
+  normalizeFileCompletionItem,
+  normalizeFileCompletionItems
+} from '../src/api/fileCompletionContract.ts'
+import {
   countResourceReferences,
   createDocumentResourceLinkExtension,
   createBindIntent,
   createDocumentReferenceAttributes,
+  createResourceBindIntent,
+  createResourceReferenceAttributes,
   createUnbindIntent,
   findDocumentLinkTrigger,
   flattenResourceReferencesToText,
@@ -191,6 +197,20 @@ test('round trips BIND and UNBIND envelopes and keeps targetId as bigint', () =>
   assert.equal(DOCUMENT_BINDING_ENVELOPE_BODY_BYTES, 27)
 })
 
+test('keeps the legacy DOCUMENT byte and appends NOTE and IMAGE target bytes', () => {
+  const expectedWireValues = new Map([
+    [DocumentBindingTargetType.DOCUMENT, 0x01],
+    [DocumentBindingTargetType.NOTE, 0x02],
+    [DocumentBindingTargetType.IMAGE, 0x03]
+  ])
+  for (const [targetType, wireValue] of expectedWireValues) {
+    const envelope = { ...createEnvelope(), targetType }
+    const body = encodeDocumentBindingEnvelope(envelope)
+    assert.equal(body[18], wireValue)
+    assert.deepEqual(decodeDocumentBindingEnvelope(body), envelope)
+  }
+})
+
 test('rejects malformed LINK payloads and invalid binding fields', () => {
   const valid = encodeDocumentLinkPayload(createEnvelope(), new Uint8Array([7]))
 
@@ -209,6 +229,10 @@ test('rejects malformed LINK payloads and invalid binding fields', () => {
   const invalidTarget = createEnvelope()
   invalidTarget.targetId = 0n
   assert.throws(() => encodeDocumentBindingEnvelope(invalidTarget), /targetId/)
+
+  const unknownTargetType = createEnvelope()
+  unknownTargetType.targetType = 0x04 as DocumentBindingTargetType
+  assert.throws(() => encodeDocumentBindingEnvelope(unknownTargetType), /target type/)
 
   assert.throws(() => encodeDocumentLinkPayload(createEnvelope(), new Uint8Array()), /raw Yjs/)
   assert.throws(() => decodeDocumentLinkPayload(valid.slice(0, -1)), /长度无效/)
@@ -538,6 +562,8 @@ test('creates DOCUMENT reference attributes and preserves the same refId for reb
     () => '123e4567-e89b-12d3-a456-426614174001'
   )
   assert.deepEqual(attributes, {
+    nodeId: '123e4567-e89b-12d3-a456-426614174001',
+    nodeVersion: 0,
     refId: '123e4567-e89b-12d3-a456-426614174001',
     resourceType: 'DOCUMENT',
     resourceId: '42',
@@ -551,8 +577,49 @@ test('creates DOCUMENT reference attributes and preserves the same refId for reb
   assert.equal(bind.commandType, DocumentBindingCommandType.BIND)
 })
 
+test('creates NOTE, IMAGE and DOCUMENT references from file completion items', () => {
+  const candidates = normalizeFileCompletionItems([
+    { fileName: '一条笔记', resourceType: 'NOTE', resourceId: '123', resourceUrl: 'ignored' },
+    { fileName: '一张图片.png', resourceType: 'IMAGE', resourceId: '456', resourceUrl: 'https://cdn.test/image.png' },
+    { fileName: '一份文档', resourceType: 'DOCUMENT', resourceId: '789', resourceUrl: 'ignored' }
+  ])
+  const generatedIds = [
+    '123e4567-e89b-12d3-a456-426614174010',
+    '123e4567-e89b-12d3-a456-426614174011',
+    '123e4567-e89b-12d3-a456-426614174012'
+  ]
+
+  for (const candidate of candidates) {
+    const attributes = createResourceReferenceAttributes(
+      candidate.resourceType,
+      candidate.resourceId,
+      candidate.fileName,
+      new Set<string>(),
+      () => generatedIds.shift()!
+    )
+    const bind = createResourceBindIntent(attributes.refId, candidate.resourceType, candidate.resourceId)
+    assert.equal(attributes.nodeId, attributes.refId)
+    assert.equal(attributes.nodeVersion, 0)
+    assert.equal(attributes.resourceType, candidate.resourceType)
+    assert.equal(attributes.resourceId, candidate.resourceId)
+    assert.equal(bind.targetType, {
+      NOTE: DocumentBindingTargetType.NOTE,
+      IMAGE: DocumentBindingTargetType.IMAGE,
+      DOCUMENT: DocumentBindingTargetType.DOCUMENT
+    }[candidate.resourceType])
+  }
+
+  assert.equal(candidates[0].resourceUrl, null)
+  assert.equal(candidates[1].resourceUrl, 'https://cdn.test/image.png')
+  assert.equal(candidates[2].resourceUrl, null)
+  assert.throws(() => normalizeFileCompletionItem({
+    fileName: 'bad', resourceType: 'VIDEO', resourceId: '1', resourceUrl: null
+  }), /资源类型无效/)
+})
+
 test('creates UNBIND only for complete DOCUMENT references and handles legacy placeholders', () => {
   const unbind = createUnbindIntent({
+    nodeId: REF_ID,
     refId: REF_ID,
     resourceType: 'DOCUMENT',
     resourceId: '42'
@@ -561,15 +628,43 @@ test('creates UNBIND only for complete DOCUMENT references and handles legacy pl
   assert.equal(unbind.commandType, DocumentBindingCommandType.UNBIND)
   assert.equal(unbind.targetId, 42n)
 
+  for (const [resourceType, targetType] of [
+    ['NOTE', DocumentBindingTargetType.NOTE],
+    ['IMAGE', DocumentBindingTargetType.IMAGE],
+    ['DOCUMENT', DocumentBindingTargetType.DOCUMENT]
+  ] as const) {
+    const resourceUnbind = createUnbindIntent({
+      nodeId: REF_ID,
+      refId: REF_ID,
+      resourceType,
+      resourceId: '42'
+    })
+    assert.ok(resourceUnbind)
+    assert.equal(resourceUnbind.targetType, targetType)
+  }
+
   assert.equal(createUnbindIntent({
     refId: REF_ID,
     resourceType: null,
     resourceId: null
   }), null)
   assert.equal(createUnbindIntent({
+    nodeId: '123e4567-e89b-12d3-a456-426614174002',
     refId: REF_ID,
     resourceType: 'DOCUMENT',
     resourceId: 'not-a-number'
+  }), null)
+  assert.equal(createUnbindIntent({
+    nodeId: 'not-a-uuid',
+    refId: REF_ID,
+    resourceType: 'DOCUMENT',
+    resourceId: '42'
+  }), null)
+  assert.equal(createUnbindIntent({
+    nodeId: '123e4567-e89b-12d3-a456-426614174002',
+    refId: REF_ID,
+    resourceType: 'DOCUMENT',
+    resourceId: '42'
   }), null)
 })
 
@@ -757,7 +852,7 @@ function resourceLinkProps(ydoc: Y.Doc, blocked: string[]) {
   const extension = createDocumentResourceLinkExtension({
     ydoc,
     isEditable: () => true,
-    getExistingRefIds: () => new Set([REF_ID]),
+    getExistingNodeIds: () => new Set([REF_ID]),
     onTriggerChange: () => {},
     onTriggerKeyDown: () => false,
     onResourceReferenceSelectionChange: () => {},

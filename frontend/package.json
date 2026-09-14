@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:share-link": "node --experimental-strip-types --test scripts/share-link.test.ts",
     "test:document-collaboration": "node --experimental-transform-types --test scripts/document-collaboration.test.ts",
-    "test:document-link": "node --experimental-transform-types --test scripts/document-link.test.ts"
+    "test:document-link": "node --experimental-transform-types --test scripts/document-link.test.ts",
+    "test:crdt-node-identity": "node --experimental-transform-types --test scripts/crdt-node-identity.test.ts"
   },
   "dependencies": {
     "@arco-design/web-vue": "^2.0.0",

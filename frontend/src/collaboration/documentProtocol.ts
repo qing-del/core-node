@@ -4,7 +4,7 @@ export const DOCUMENT_WS_PROTOCOL_VERSION = 1
 export const DOCUMENT_WS_HEADER_BYTES = 18
 /** LINK payload 中 envelopeLength 字段的固定长度。 */
 export const DOCUMENT_LINK_ENVELOPE_LENGTH_BYTES = 4
-/** v0.6 BindingEnvelope body 的固定长度。 */
+/** v0.6/v0.7 BindingEnvelope body 的固定长度。 */
 export const DOCUMENT_BINDING_ENVELOPE_BODY_BYTES = 27
 /** LINK payload 在 raw Yjs update 之前的固定开销。 */
 export const DOCUMENT_LINK_FIXED_PAYLOAD_BYTES =
@@ -18,9 +18,11 @@ export enum DocumentBindingCommandType {
   UNBIND = 0x02
 }
 
-/** v0.6 LINK 中的资源目标类型。 */
+/** LINK 中的资源目标类型；DOCUMENT wire value 保持 v0.6 兼容。 */
 export enum DocumentBindingTargetType {
-  DOCUMENT = 0x01
+  DOCUMENT = 0x01,
+  NOTE = 0x02,
+  IMAGE = 0x03
 }
 
 /** LINK 的固定 27 字节 Envelope；targetId 使用 bigint 保留 MySQL BIGINT 精度。 */
@@ -201,7 +203,9 @@ function assertDocumentBindingEnvelope(envelope: DocumentBindingEnvelope): void 
     throw new Error('文档 LINK binding command type 无效')
   }
   assertBindingRefId(envelope.refId)
-  if (envelope.targetType !== DocumentBindingTargetType.DOCUMENT) {
+  if (envelope.targetType !== DocumentBindingTargetType.DOCUMENT
+      && envelope.targetType !== DocumentBindingTargetType.NOTE
+      && envelope.targetType !== DocumentBindingTargetType.IMAGE) {
     throw new Error('文档 LINK target type 无效')
   }
   if (typeof envelope.targetId !== 'bigint' || envelope.targetId <= 0n

@@ -34,9 +34,9 @@ import {
   type DocumentAccessMetadata,
   type DocumentPermission,
   type DocumentShareLink,
-  type DocumentMetadata,
   type DocumentUserAuthorization
 } from '@/api/documents'
+import { fileApi, type FileCompletionItem, type FileResourceType } from '@/api/files'
 import {
   DocumentCollaborationClient,
   type DocumentCollaborationError,
@@ -46,15 +46,19 @@ import {
 import { createDocumentCollaborationCaret } from '@/collaboration/DocumentCollaborationCaret'
 import {
   DOCUMENT_LINK_TRANSACTION_META,
-  createBindIntent,
-  createDocumentReferenceAttributes,
+  createResourceBindIntent,
+  createResourceReferenceAttributes,
   createDocumentResourceLinkExtension,
   createUnbindIntent,
-  getResourceReferenceIds,
   runDocumentLinkTransaction,
   type DocumentLinkTrigger
 } from '@/editor/documentResourceLink'
 import { ResourceReference, type ResourceReferenceAttributes } from '@/editor/ResourceReference'
+import {
+  CrdtNodeIdentity,
+  getCrdtNodeIds,
+  hasResourceReferenceIdentityMismatch
+} from '@/editor/crdtNodeIdentity'
 import { useAuthStore } from '@/stores/auth'
 import { confirmAction, toastError, toastInfo, toastSuccess } from '@/utils/feedback'
 import { readAuthSession } from '@/utils/authSession'
@@ -138,17 +142,18 @@ let shareUrlCopyTimer: number | null = null
 
 /** `[[关键词` 绑定/重绑定候选弹层的当前位置和模式。 */
 const documentLinkPicker = ref<DocumentLinkTrigger | null>(null)
-/** 当前用户可访问且未删除的协作文档候选。 */
-const documentLinkCandidates = ref<DocumentMetadata[]>([])
-/** 候选文档列表请求状态。 */
+/** 当前用户可访问且未删除的 file completion 候选。 */
+const documentLinkCandidates = ref<FileCompletionItem[]>([])
+/** 候选资源列表请求状态。 */
 const documentLinkCandidatesLoading = ref(false)
-/** 候选文档列表请求错误；不影响正文协同。 */
+/** 候选资源列表请求错误；不影响正文协同。 */
 const documentLinkCandidatesError = ref<string | null>(null)
 /** 键盘上下移动时的当前候选索引。 */
 const documentLinkCandidateIndex = ref(0)
 /** 当前被 Tiptap NodeSelection 选中的资源引用。 */
 const selectedResourceReference = ref<ResourceReferenceAttributes | null>(null)
 let documentLinkCandidateRequestVersion = 0
+let documentLinkCandidateDebounceTimer: number | null = null
 
 /** 授权列表中的可编辑行，草稿字段只在保存成功后由服务端数据覆盖。 */
 interface AuthorizationRow extends DocumentUserAuthorization {
@@ -712,11 +717,12 @@ async function initializeEditor(): Promise<void> {
         StarterKit.configure({ undoRedo: false }),
         Collaboration.configure({ document, field: 'content' }),
         createDocumentCollaborationCaret(client, localAwarenessUser),
+        CrdtNodeIdentity,
         ResourceReference,
         createDocumentResourceLinkExtension({
           ydoc: document,
           isEditable: () => editorCanEdit.value,
-          getExistingRefIds: () => editor ? getResourceReferenceIds(editor.state.doc) : new Set<string>(),
+          getExistingNodeIds: () => editor ? getCrdtNodeIds(editor.state.doc) : new Set<string>(),
           onTriggerChange: handleDocumentLinkTriggerChange,
           onTriggerKeyDown: handleDocumentLinkTriggerKeyDown,
           onResourceReferenceSelectionChange: attributes => { selectedResourceReference.value = attributes },
@@ -822,6 +828,10 @@ function isActive(name: string): boolean {
 /** 清理当前文档引用候选和选中状态，避免路由切换复用旧文档的 UI。 */
 function resetDocumentLinkUi(): void {
   documentLinkCandidateRequestVersion += 1
+  if (documentLinkCandidateDebounceTimer !== null) {
+    window.clearTimeout(documentLinkCandidateDebounceTimer)
+    documentLinkCandidateDebounceTimer = null
+  }
   documentLinkPicker.value = null
   documentLinkCandidates.value = []
   documentLinkCandidatesLoading.value = false
@@ -833,6 +843,10 @@ function resetDocumentLinkUi(): void {
 /** 关闭候选弹层并使已经发出的列表请求失效。 */
 function closeDocumentLinkPicker(): void {
   documentLinkCandidateRequestVersion += 1
+  if (documentLinkCandidateDebounceTimer !== null) {
+    window.clearTimeout(documentLinkCandidateDebounceTimer)
+    documentLinkCandidateDebounceTimer = null
+  }
   documentLinkPicker.value = null
   documentLinkCandidates.value = []
   documentLinkCandidatesLoading.value = false
@@ -847,35 +861,51 @@ function handleDocumentLinkTriggerChange(trigger: DocumentLinkTrigger | null): v
   documentLinkPicker.value = trigger
   documentLinkCandidateIndex.value = 0
   if (!trigger) {
+    if (documentLinkCandidateDebounceTimer !== null) {
+      window.clearTimeout(documentLinkCandidateDebounceTimer)
+      documentLinkCandidateDebounceTimer = null
+    }
     documentLinkCandidates.value = []
     documentLinkCandidatesLoading.value = false
     documentLinkCandidatesError.value = null
     return
   }
-  void loadDocumentLinkCandidates(trigger.query, trigger)
+  scheduleDocumentLinkCandidates(trigger.query, trigger)
 }
 
-/** 查询当前用户可访问且未逻辑删除的协作文档，并丢弃过期弹层的响应。 */
+/** 以轻量 debounce 合并快速输入，避免每个关键词字符都发起一次请求。 */
+function scheduleDocumentLinkCandidates(query: string, picker: DocumentLinkTrigger): void {
+  if (documentLinkCandidateDebounceTimer !== null) window.clearTimeout(documentLinkCandidateDebounceTimer)
+  documentLinkCandidatesLoading.value = true
+  documentLinkCandidateDebounceTimer = window.setTimeout(() => {
+    documentLinkCandidateDebounceTimer = null
+    void loadDocumentLinkCandidates(query, picker)
+  }, 150)
+}
+
+/** 查询当前用户可访问且未逻辑删除的 file completion，并丢弃过期响应。 */
 async function loadDocumentLinkCandidates(query: string, picker: DocumentLinkTrigger): Promise<void> {
   const requestedVersion = ++documentLinkCandidateRequestVersion
   documentLinkCandidatesLoading.value = true
   documentLinkCandidatesError.value = null
   try {
-    const records = await documentApi.list()
+    const records = await fileApi.complete(query, 10)
     if (requestedVersion !== documentLinkCandidateRequestVersion || documentLinkPicker.value !== picker) return
-    const normalizedQuery = query.trim().toLocaleLowerCase()
-    documentLinkCandidates.value = records.filter(record => {
-      if (record.deleted || !Number.isSafeInteger(record.documentId) || record.documentId <= 0
-          || typeof record.title !== 'string') return false
-      return !normalizedQuery || record.title.toLocaleLowerCase().includes(normalizedQuery)
-    })
+    documentLinkCandidates.value = records
   } catch (cause) {
     if (requestedVersion !== documentLinkCandidateRequestVersion || documentLinkPicker.value !== picker) return
     documentLinkCandidates.value = []
-    documentLinkCandidatesError.value = getErrorMessage(cause, '无法加载可绑定的协作文档')
+    documentLinkCandidatesError.value = getErrorMessage(cause, '无法加载可绑定的资源')
   } finally {
     if (requestedVersion === documentLinkCandidateRequestVersion) documentLinkCandidatesLoading.value = false
   }
+}
+
+/** file index 资源类型的简短中文标签，仅用于候选弹层展示。 */
+function fileResourceTypeLabel(resourceType: FileResourceType): string {
+  if (resourceType === 'NOTE') return '笔记'
+  if (resourceType === 'IMAGE') return '图片'
+  return '文档'
 }
 
 /** 处理候选弹层的上下移动、确认和取消键。 */
@@ -905,11 +935,9 @@ function handleDocumentLinkTriggerKeyDown(
   return false
 }
 
-/** 候选按钮和回车共用的绑定/重绑定提交入口。 */
-function selectDocumentLinkCandidate(candidate: DocumentMetadata): void {
-  if (!editorCanEdit.value || !editor || !ydoc || candidate.deleted
-      || !Number.isSafeInteger(candidate.documentId) || candidate.documentId <= 0
-      || typeof candidate.title !== 'string') return
+/** 候选按钮和回车共用的三类资源绑定/重绑定提交入口。 */
+function selectDocumentLinkCandidate(candidate: FileCompletionItem): void {
+  if (!editorCanEdit.value || !editor || !ydoc) return
   const picker = documentLinkPicker.value
   if (!picker) return
 
@@ -918,19 +946,23 @@ function selectDocumentLinkCandidate(candidate: DocumentMetadata): void {
     return
   }
 
-  const existingRefIds = getResourceReferenceIds(editor.state.doc)
-  const attributes = createDocumentReferenceAttributes(candidate.documentId, candidate.title, existingRefIds)
-  const intent = createBindIntent(attributes.refId, candidate.documentId)
+  const attributes = createResourceReferenceAttributes(
+    candidate.resourceType,
+    candidate.resourceId,
+    candidate.fileName,
+    getCrdtNodeIds(editor.state.doc)
+  )
+  const intent = createResourceBindIntent(attributes.refId, candidate.resourceType, candidate.resourceId)
   const command = () => editor?.chain()
     .focus()
     .insertContentAt({ from: picker.from, to: picker.to }, { type: 'resourceReference', attrs: attributes })
     .run() ?? false
   closeDocumentLinkPicker()
-  if (runDocumentLinkTransaction(ydoc, intent, command)) toastSuccess('文档引用已绑定')
+  if (runDocumentLinkTransaction(ydoc, intent, command)) toastSuccess('资源引用已绑定')
 }
 
 /** 读取当前 NodeSelection，以原 refId 更新目标并只发送一个 BIND LINK。 */
-function rebindSelectedDocumentReference(candidate: DocumentMetadata, picker: DocumentLinkTrigger): void {
+function rebindSelectedDocumentReference(candidate: FileCompletionItem, picker: DocumentLinkTrigger): void {
   if (!editor || !ydoc || !selectedResourceReference.value || !picker.refId) return
   const selection = editor.state.selection
   if (!(selection instanceof NodeSelection)
@@ -940,15 +972,21 @@ function rebindSelectedDocumentReference(candidate: DocumentMetadata, picker: Do
     showDocumentLinkNotice('引用选择已变化，请重新选择后再绑定。')
     return
   }
+  if (hasResourceReferenceIdentityMismatch(selectedResourceReference.value)) {
+    closeDocumentLinkPicker()
+    showDocumentLinkNotice('引用身份不一致，已阻止重新绑定，请先修复该历史引用。')
+    return
+  }
 
   const attributes: ResourceReferenceAttributes = {
     ...selectedResourceReference.value,
+    nodeId: picker.refId,
     refId: picker.refId,
-    resourceType: 'DOCUMENT',
-    resourceId: String(candidate.documentId),
-    displayText: candidate.title
+    resourceType: candidate.resourceType,
+    resourceId: candidate.resourceId,
+    displayText: candidate.fileName
   }
-  const intent = createBindIntent(picker.refId, candidate.documentId)
+  const intent = createResourceBindIntent(picker.refId, candidate.resourceType, candidate.resourceId)
   const transaction = editor.state.tr
     .setNodeMarkup(selection.from, undefined, attributes)
     .setMeta(DOCUMENT_LINK_TRANSACTION_META, true)
@@ -958,7 +996,7 @@ function rebindSelectedDocumentReference(candidate: DocumentMetadata, picker: Do
     editor?.view.dispatch(transaction)
     return true
   })
-  toastSuccess('文档引用已重新绑定')
+  toastSuccess('资源引用已重新绑定')
 }
 
 /** 对当前选中的引用执行 UNBIND；历史空属性占位节点按普通删除处理。 */
@@ -994,7 +1032,7 @@ function openDocumentReferenceRebindPicker(): void {
   const picker: DocumentLinkTrigger = {
     from: selection.from,
     to: selection.to,
-    // 重绑定不应被旧标题限制，候选列表展示当前用户全部可访问文档。
+    // 重绑定不受旧显示文本限制，候选列表使用 file index 的空前缀查询。
     query: '',
     mode: 'rebind',
     left: coords.left,
@@ -1003,7 +1041,7 @@ function openDocumentReferenceRebindPicker(): void {
   }
   documentLinkPicker.value = picker
   documentLinkCandidateIndex.value = 0
-  void loadDocumentLinkCandidates(picker.query, picker)
+  scheduleDocumentLinkCandidates(picker.query, picker)
 }
 
 /** 插件无法继续执行时使用统一的轻量提示，不改变正文和协作队列。 */
@@ -1111,19 +1149,19 @@ onUnmounted(() => {
         class="document-link-picker"
         :style="documentLinkPickerStyle"
         role="listbox"
-        aria-label="可绑定的协作文档"
+        aria-label="可绑定的文件资源"
       >
         <div class="document-link-picker-heading">
-          <span>{{ documentLinkPicker?.mode === 'rebind' ? '重新绑定文档' : '绑定到协作文档' }}</span>
+          <span>{{ documentLinkPicker?.mode === 'rebind' ? '重新绑定资源' : '绑定到文件资源' }}</span>
           <small v-if="documentLinkPicker?.query">{{ documentLinkPicker.query }}</small>
         </div>
-        <div v-if="documentLinkCandidatesLoading" class="document-link-picker-state"><Loader2 class="h-4 w-4 animate-spin" /> 正在加载文档…</div>
+        <div v-if="documentLinkCandidatesLoading" class="document-link-picker-state"><Loader2 class="h-4 w-4 animate-spin" /> 正在加载资源…</div>
         <div v-else-if="documentLinkCandidatesError" class="document-link-picker-state is-error">{{ documentLinkCandidatesError }}</div>
-        <div v-else-if="documentLinkCandidates.length === 0" class="document-link-picker-state">没有匹配的可访问文档</div>
+        <div v-else-if="documentLinkCandidates.length === 0" class="document-link-picker-state">没有匹配的可访问资源</div>
         <div v-else class="document-link-picker-options">
           <button
             v-for="(candidate, index) in documentLinkCandidates"
-            :key="candidate.documentId"
+            :key="`${candidate.resourceType}:${candidate.resourceId}`"
             class="document-link-picker-option"
             :class="{ active: index === documentLinkCandidateIndex }"
             type="button"
@@ -1133,8 +1171,8 @@ onUnmounted(() => {
             @mouseenter="documentLinkCandidateIndex = index"
             @click="selectDocumentLinkCandidate(candidate)"
           >
-            <span class="document-link-picker-option-title">{{ candidate.title }}</span>
-            <span class="document-link-picker-option-id">#{{ candidate.documentId }}</span>
+            <span class="document-link-picker-option-title">{{ candidate.fileName }}</span>
+            <span class="document-link-picker-option-id">{{ fileResourceTypeLabel(candidate.resourceType) }} #{{ candidate.resourceId }}</span>
           </button>
         </div>
         <div class="document-link-picker-hint">↑↓ 选择 · Enter 确认 · Esc 取消</div>

@@ -10,9 +10,15 @@ import {
   isDocumentLinkIntent,
   type DocumentLinkIntent
 } from '../collaboration/documentProtocol.ts'
+import type { FileResourceType } from '@/api/files'
 import type { ResourceReferenceAttributes } from './ResourceReference.ts'
+import {
+  hasResourceReferenceIdentityMismatch,
+  isValidCrdtNodeId,
+  remapCrdtNodeIdentitiesInSlice
+} from './crdtNodeIdentity.ts'
 
-export const DOCUMENT_RESOURCE_TYPE = 'DOCUMENT'
+export const DOCUMENT_RESOURCE_TYPE: FileResourceType = 'DOCUMENT'
 export const RESOURCE_REFERENCE_NODE_NAME = 'resourceReference'
 export const DOCUMENT_LINK_TRANSACTION_META = 'document-link-transaction'
 
@@ -38,10 +44,21 @@ export function resourceIdToTargetId(resourceId: string | null): bigint | null {
   }
 }
 
-/** 创建一个已经带有固定 kind 的绑定意图，供 Yjs transaction origin 使用。 */
-export function createDocumentLinkIntent(
+/** 将正文资源类型映射为线上 targetType；未知历史值不能进入 LINK。 */
+export function resourceTypeToTargetType(
+  resourceType: FileResourceType | null
+): DocumentBindingTargetType | null {
+  if (resourceType === 'DOCUMENT') return DocumentBindingTargetType.DOCUMENT
+  if (resourceType === 'NOTE') return DocumentBindingTargetType.NOTE
+  if (resourceType === 'IMAGE') return DocumentBindingTargetType.IMAGE
+  return null
+}
+
+/** 创建一个已经带有固定 kind 的资源绑定意图，供 Yjs transaction origin 使用。 */
+export function createResourceLinkIntent(
   commandType: DocumentBindingCommandType,
   refId: string,
+  targetType: DocumentBindingTargetType,
   targetId: bigint
 ): DocumentLinkIntent {
   const intent: DocumentLinkIntent = {
@@ -49,18 +66,39 @@ export function createDocumentLinkIntent(
     schemaVersion: 1,
     commandType,
     refId,
-    targetType: DocumentBindingTargetType.DOCUMENT,
+    targetType,
     targetId
   }
-  if (!isDocumentLinkIntent(intent)) throw new Error('文档 LinkIntent 无效')
+  if (!isDocumentLinkIntent(intent)) throw new Error('资源 LinkIntent 无效')
   return intent
 }
 
-/** 创建 BIND 意图；rebind 也复用该函数并保留传入的 refId。 */
+/** 兼容旧 DOCUMENT 调用方的固定目标 wrapper。 */
+export function createDocumentLinkIntent(
+  commandType: DocumentBindingCommandType,
+  refId: string,
+  targetId: bigint
+): DocumentLinkIntent {
+  return createResourceLinkIntent(commandType, refId, DocumentBindingTargetType.DOCUMENT, targetId)
+}
+
+/** 创建任意 file resource 的 BIND 意图；resourceId 仍以字符串承载。 */
+export function createResourceBindIntent(
+  refId: string,
+  resourceType: FileResourceType,
+  resourceId: string | bigint
+): DocumentLinkIntent {
+  const targetType = resourceTypeToTargetType(resourceType)
+  const targetId = typeof resourceId === 'bigint' ? resourceId : resourceIdToTargetId(resourceId)
+  if (targetType === null || targetId === null) throw new Error('资源绑定目标无效')
+  return createResourceLinkIntent(DocumentBindingCommandType.BIND, refId, targetType, targetId)
+}
+
+/** 创建 DOCUMENT BIND 意图；保留旧 API 以兼容现有调用方和历史测试。 */
 export function createBindIntent(refId: string, documentId: number | bigint): DocumentLinkIntent {
-  return createDocumentLinkIntent(
-    DocumentBindingCommandType.BIND,
+  return createResourceBindIntent(
     refId,
+    DOCUMENT_RESOURCE_TYPE,
     typeof documentId === 'bigint' ? documentId : documentIdToTargetId(documentId)
   )
 }
@@ -72,12 +110,19 @@ export function createBindIntent(refId: string, documentId: number | bigint): Do
  */
 export function createUnbindIntent(
   attributes: Pick<ResourceReferenceAttributes, 'refId' | 'resourceType' | 'resourceId'>
+    & { nodeId?: unknown }
 ): DocumentLinkIntent | null {
-  if (attributes.resourceType !== DOCUMENT_RESOURCE_TYPE || !attributes.refId) return null
+  const hasNodeId = typeof attributes.nodeId === 'string' && attributes.nodeId.length > 0
+  if (!attributes.refId
+      || (hasNodeId && (!isValidCrdtNodeId(attributes.nodeId)
+        || attributes.nodeId.toLowerCase() !== attributes.refId.toLowerCase()))
+      || hasResourceReferenceIdentityMismatch(attributes)) return null
+  const targetType = resourceTypeToTargetType(attributes.resourceType)
+  if (targetType === null) return null
   const targetId = resourceIdToTargetId(attributes.resourceId)
   if (targetId === null) return null
   try {
-    return createDocumentLinkIntent(DocumentBindingCommandType.UNBIND, attributes.refId, targetId)
+    return createResourceLinkIntent(DocumentBindingCommandType.UNBIND, attributes.refId, targetType, targetId)
   } catch {
     return null
   }
@@ -96,21 +141,43 @@ export function runDocumentLinkTransaction(
   return result
 }
 
-/** 创建新 DOCUMENT 引用属性；每次新建都生成新的 refId。 */
+/** 创建新资源引用属性；nodeId 和 refId 共用同一个全新 UUID。 */
+export function createResourceReferenceAttributes(
+  resourceType: FileResourceType,
+  resourceId: string,
+  displayText: string,
+  existingNodeIds: ReadonlySet<string>,
+  generateNodeId: () => string = () => crypto.randomUUID()
+): ResourceReferenceAttributes {
+  if (resourceTypeToTargetType(resourceType) === null || resourceIdToTargetId(resourceId) === null) {
+    throw new Error('资源引用目标无效')
+  }
+  const nodeId = createUniqueRefId(existingNodeIds, generateNodeId)
+  return {
+    nodeId,
+    nodeVersion: 0,
+    refId: nodeId,
+    resourceType,
+    resourceId,
+    displayText,
+    alias: null
+  }
+}
+
+/** 创建新 DOCUMENT 引用属性；保留旧 helper 的 number 入参。 */
 export function createDocumentReferenceAttributes(
   documentId: number,
   displayText: string,
   existingRefIds: ReadonlySet<string>,
   generateRefId: () => string = () => crypto.randomUUID()
 ): ResourceReferenceAttributes {
-  const refId = createUniqueRefId(existingRefIds, generateRefId)
-  return {
-    refId,
-    resourceType: DOCUMENT_RESOURCE_TYPE,
-    resourceId: documentIdToTargetId(documentId).toString(),
+  return createResourceReferenceAttributes(
+    DOCUMENT_RESOURCE_TYPE,
+    documentIdToTargetId(documentId).toString(),
     displayText,
-    alias: null
-  }
+    existingRefIds,
+    generateRefId
+  )
 }
 
 /** 生成不为空且不与正文已有引用冲突的 UUID。 */
@@ -126,7 +193,7 @@ export function createUniqueRefId(
   throw new Error('无法生成唯一的资源引用 ID')
 }
 
-/** 收集正文中已经存在的 resourceReference refId。 */
+/** 收集正文中已经存在的 resourceReference refId；旧调用方继续使用该窄集合。 */
 export function getResourceReferenceIds(document: ProseMirrorNode): Set<string> {
   const ids = new Set<string>()
   document.descendants(node => {
@@ -164,7 +231,7 @@ export function flattenResourceReferencesToText(slice: Slice): Slice {
   return new Slice(content, slice.openStart, slice.openEnd)
 }
 
-/** 为复制/粘贴/导入的每个引用分配全新的 refId，并保留其 target 属性。 */
+/** 兼容旧调用方，仅重映射 resourceReference；编辑器粘贴路径使用全量 helper。 */
 export function remapResourceReferenceIds(
   document: ProseMirrorNode,
   existingRefIds: ReadonlySet<string>,
@@ -175,11 +242,13 @@ export function remapResourceReferenceIds(
     if (node.type.name !== RESOURCE_REFERENCE_NODE_NAME) return node
     const refId = createUniqueRefId(ids, generateRefId)
     ids.add(refId)
-    return node.type.create({ ...node.attrs, refId }, node.content, node.marks)
+    const attrs: Record<string, unknown> = { ...node.attrs, nodeId: refId, nodeVersion: 0 }
+    if (!hasResourceReferenceIdentityMismatch(node.attrs)) attrs.refId = refId
+    return node.type.create(attrs, node.content, node.marks)
   })
 }
 
-/** 对 ProseMirror 粘贴 Slice 执行 refId 重映射，保留 openStart/openEnd。 */
+/** 兼容旧调用方，仅重映射 resourceReference；编辑器粘贴路径使用全量 helper。 */
 export function remapResourceReferenceIdsInSlice(
   slice: Slice,
   existingRefIds: ReadonlySet<string>,
@@ -190,7 +259,9 @@ export function remapResourceReferenceIdsInSlice(
     if (node.type.name !== RESOURCE_REFERENCE_NODE_NAME) return node
     const refId = createUniqueRefId(ids, generateRefId)
     ids.add(refId)
-    return node.type.create({ ...node.attrs, refId }, node.content, node.marks)
+    const attrs: Record<string, unknown> = { ...node.attrs, nodeId: refId, nodeVersion: 0 }
+    if (!hasResourceReferenceIdentityMismatch(node.attrs)) attrs.refId = refId
+    return node.type.create(attrs, node.content, node.marks)
   })
   return new Slice(content, slice.openStart, slice.openEnd)
 }
@@ -224,8 +295,12 @@ function collectResourceReferenceAttributes(
 
 function toResourceReferenceAttributes(attrs: Record<string, unknown>): ResourceReferenceAttributes {
   return {
+    nodeId: typeof attrs.nodeId === 'string' ? attrs.nodeId : '',
+    nodeVersion: typeof attrs.nodeVersion === 'number' && Number.isSafeInteger(attrs.nodeVersion)
+      && attrs.nodeVersion >= 0 ? attrs.nodeVersion : 0,
     refId: typeof attrs.refId === 'string' ? attrs.refId : '',
-    resourceType: typeof attrs.resourceType === 'string' ? attrs.resourceType : null,
+    resourceType: attrs.resourceType === 'NOTE' || attrs.resourceType === 'IMAGE'
+      || attrs.resourceType === 'DOCUMENT' ? attrs.resourceType : null,
     resourceId: typeof attrs.resourceId === 'string' ? attrs.resourceId : null,
     displayText: typeof attrs.displayText === 'string' ? attrs.displayText : '',
     alias: typeof attrs.alias === 'string' ? attrs.alias : null
@@ -238,10 +313,14 @@ function formatResourceReferenceText(attrs: Record<string, unknown>): string {
   return alias || displayText || '未命名引用'
 }
 
-/** 判断引用是否拥有可以发送给关系投影器的完整 DOCUMENT 目标信息。 */
-function isBoundDocumentReference(attributes: ResourceReferenceAttributes): boolean {
-  return attributes.resourceType === DOCUMENT_RESOURCE_TYPE
+/** 判断引用是否拥有可以发送给关系投影器的完整资源目标信息。 */
+function isBoundResourceReference(attributes: ResourceReferenceAttributes): boolean {
+  return resourceTypeToTargetType(attributes.resourceType) !== null
     && isNonZeroUuid(attributes.refId)
+    && (!attributes.nodeId
+      || (isValidCrdtNodeId(attributes.nodeId)
+        && attributes.nodeId.toLowerCase() === attributes.refId.toLowerCase()))
+    && !hasResourceReferenceIdentityMismatch(attributes)
     && resourceIdToTargetId(attributes.resourceId) !== null
 }
 
@@ -261,7 +340,7 @@ function getBoundReferencesInRange(
   state.doc.nodesBetween(from, to, (node, position) => {
     if (node.type.name !== RESOURCE_REFERENCE_NODE_NAME) return
     const attributes = toResourceReferenceAttributes(node.attrs)
-    if (isBoundDocumentReference(attributes)) {
+    if (isBoundResourceReference(attributes)) {
       targets.push({ from: position, to: position + node.nodeSize, attributes })
     }
   })
@@ -273,7 +352,7 @@ function getDeletionTargets(state: EditorState, key: string): DocumentDeletionTa
   const { selection } = state
   if (selection instanceof NodeSelection && selection.node.type.name === RESOURCE_REFERENCE_NODE_NAME) {
     const attributes = toResourceReferenceAttributes(selection.node.attrs)
-    return isBoundDocumentReference(attributes)
+    return isBoundResourceReference(attributes)
       ? [{ from: selection.from, to: selection.to, attributes }]
       : []
   }
@@ -284,7 +363,7 @@ function getDeletionTargets(state: EditorState, key: string): DocumentDeletionTa
   const adjacent = key === 'Backspace' ? $from.nodeBefore : $from.nodeAfter
   if (!adjacent || adjacent.type.name !== RESOURCE_REFERENCE_NODE_NAME) return []
   const attributes = toResourceReferenceAttributes(adjacent.attrs)
-  if (!isBoundDocumentReference(attributes)) return []
+  if (!isBoundResourceReference(attributes)) return []
   const from = key === 'Backspace' ? selection.from - adjacent.nodeSize : selection.from
   return [{ from, to: from + adjacent.nodeSize, attributes }]
 }
@@ -305,7 +384,7 @@ export interface DocumentLinkTrigger extends DocumentLinkTriggerRange {
 export interface DocumentResourceLinkExtensionOptions {
   ydoc: Y.Doc
   isEditable: () => boolean
-  getExistingRefIds: () => ReadonlySet<string>
+  getExistingNodeIds: () => ReadonlySet<string>
   onTriggerChange: (trigger: DocumentLinkTrigger | null) => void
   onTriggerKeyDown: (event: KeyboardEvent, trigger: DocumentLinkTriggerRange) => boolean
   onResourceReferenceSelectionChange: (attributes: ResourceReferenceAttributes | null) => void
@@ -457,10 +536,11 @@ export function createDocumentResourceLinkExtension(
             }
 
             const references = getResourceReferenceAttributesInFragment(slice.content)
+            const remapped = remapCrdtNodeIdentitiesInSlice(slice, options.getExistingNodeIds())
             if (references.length > 1) {
               event.preventDefault()
               options.onActionBlocked('一次只能粘贴一个文档引用，多个引用已转为普通文本。')
-              const plainSlice = flattenResourceReferencesToText(slice)
+              const plainSlice = flattenResourceReferencesToText(remapped)
               return dispatchPaste(view, plainSlice, options, targets)
             }
 
@@ -470,55 +550,63 @@ export function createDocumentResourceLinkExtension(
                 options.onActionBlocked('请先解绑已有引用，再粘贴新的文档引用。')
                 return true
               }
-              const remapped = remapResourceReferenceIdsInSlice(slice, options.getExistingRefIds())
               const [attributes] = getResourceReferenceAttributesInFragment(remapped.content)
               const targetId = attributes ? resourceIdToTargetId(attributes.resourceId) : null
               if (attributes
-                  && attributes.resourceType === DOCUMENT_RESOURCE_TYPE
+                  && resourceTypeToTargetType(attributes.resourceType) !== null
                   && targetId !== null
-                  && attributes.refId) {
+                  && attributes.refId
+                  && isBoundResourceReference(attributes)) {
                 event.preventDefault()
                 try {
-                  const intent = createBindIntent(attributes.refId, targetId)
+                  const intent = createResourceBindIntent(attributes.refId, attributes.resourceType!, targetId)
                   return dispatchPaste(view, remapped, options, [], intent)
                 } catch {
                   // 非法导入节点降级为普通文本，不发送 malformed LINK。
                 }
               }
               event.preventDefault()
-              options.onActionBlocked('粘贴的文档引用无有效目标，已转为普通文本。')
+              options.onActionBlocked('粘贴的资源引用无有效目标，已转为普通文本。')
               return dispatchPaste(view, flattenResourceReferencesToText(remapped), options, [])
             }
 
             if (targets.length === 1) {
               event.preventDefault()
-              return dispatchPaste(view, slice, options, targets)
+              return dispatchPaste(view, remapped, options, targets)
             }
-            return false
+            // 普通节点复制/粘贴也必须获得新身份；文档内移动由 handleDrop 的 moved 分支保留原 ID。
+            event.preventDefault()
+            return dispatchPlainPaste(view, remapped)
           },
 
           /** 外部拖入引用按粘贴策略重映射并 BIND；文档内移动保留原 refId 和关系。 */
           handleDrop: (view, event, slice, moved) => {
             if (!options.isEditable() || moved) return false
-            const references = getResourceReferenceAttributesInFragment(slice.content)
-            if (references.length === 0) return false
             event.preventDefault()
+            const remapped = remapCrdtNodeIdentitiesInSlice(slice, options.getExistingNodeIds())
+            const references = getResourceReferenceAttributesInFragment(slice.content)
             if (references.length > 1) {
               options.onActionBlocked('一次只能拖入一个文档引用，多个引用已转为普通文本。')
-              return dispatchDrop(view, event, flattenResourceReferencesToText(slice), options)
+              return dispatchDrop(view, event, flattenResourceReferencesToText(remapped), options)
             }
-            const remapped = remapResourceReferenceIdsInSlice(slice, options.getExistingRefIds())
+            if (references.length === 0) return dispatchDrop(view, event, remapped, options)
             const [attributes] = getResourceReferenceAttributesInFragment(remapped.content)
             const targetId = attributes ? resourceIdToTargetId(attributes.resourceId) : null
-            if (attributes && attributes.resourceType === DOCUMENT_RESOURCE_TYPE
-                && targetId !== null && attributes.refId) {
+            if (attributes && resourceTypeToTargetType(attributes.resourceType) !== null
+                && targetId !== null && attributes.refId && isBoundResourceReference(attributes)) {
               try {
-                return dispatchDrop(view, event, remapped, options, createBindIntent(attributes.refId, targetId))
+                return dispatchDrop(
+                  view,
+                  event,
+                  remapped,
+                  options,
+                  createResourceBindIntent(attributes.refId, attributes.resourceType!, targetId)
+                )
               } catch {
                 // 降级为普通文本，不能让格式错误的拖入内容生成 malformed LINK。
               }
             }
-            options.onActionBlocked('拖入的文档引用无有效目标，已转为普通文本。')
+            options.onActionBlocked('拖入的资源引用无有效目标，已转为普通文本。')
             return dispatchDrop(view, event, flattenResourceReferencesToText(remapped), options)
           }
         }
