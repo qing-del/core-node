@@ -12,6 +12,7 @@ public class DocumentProperties {
     private FlushLog flushLog = new FlushLog();
     private Compact compact = new Compact();
     private Snapshot snapshot = new Snapshot();
+    private NodeMigration nodeMigration = new NodeMigration();
 
     /** 返回文档模块总开关。 */
     public boolean isEnabled() { return enabled; }
@@ -41,6 +42,12 @@ public class DocumentProperties {
     public Snapshot getSnapshot() { return snapshot; }
     /** 设置快照大小配置；null 时恢复默认配置对象。 */
     public void setSnapshot(Snapshot snapshot) { this.snapshot = snapshot == null ? new Snapshot() : snapshot; }
+    /** 返回历史节点身份迁移配置。 */
+    public NodeMigration getNodeMigration() { return nodeMigration; }
+    /** 设置历史节点身份迁移配置；null 时恢复默认配置对象。 */
+    public void setNodeMigration(NodeMigration nodeMigration) {
+        this.nodeMigration = nodeMigration == null ? new NodeMigration() : nodeMigration;
+    }
 
     public static class Websocket {
         private int protocolVersion = 1;
@@ -121,5 +128,30 @@ public class DocumentProperties {
         public int getMaxBytes() { return maxBytes; }
         /** 设置快照大小硬上限。 */
         public void setMaxBytes(int maxBytes) { this.maxBytes = maxBytes; }
+    }
+
+    /** 一次性节点身份迁移的运行开关、分页和请求分批配置。 */
+    public static class NodeMigration {
+        private boolean runOnStart;
+        private int pageSize = 100;
+        private int maxUpdateBatchBytes = 512 * 1024;
+        private int maxCasRetries = 3;
+
+        /** 返回是否在当前实例启动后执行一次迁移。 */
+        public boolean isRunOnStart() { return runOnStart; }
+        /** 设置启动时迁移开关；默认关闭。 */
+        public void setRunOnStart(boolean runOnStart) { this.runOnStart = runOnStart; }
+        /** 返回单次扫描的文档数量。 */
+        public int getPageSize() { return pageSize; }
+        /** 设置单次扫描的文档数量。 */
+        public void setPageSize(int pageSize) { this.pageSize = pageSize; }
+        /** 返回单次提交给 Yjs 服务的增量字节上限。 */
+        public int getMaxUpdateBatchBytes() { return maxUpdateBatchBytes; }
+        /** 设置单次提交给 Yjs 服务的增量字节上限。 */
+        public void setMaxUpdateBatchBytes(int maxUpdateBatchBytes) { this.maxUpdateBatchBytes = maxUpdateBatchBytes; }
+        /** 返回快照 CAS 失败后的最大重试次数。 */
+        public int getMaxCasRetries() { return maxCasRetries; }
+        /** 设置快照 CAS 失败后的最大重试次数。 */
+        public void setMaxCasRetries(int maxCasRetries) { this.maxCasRetries = maxCasRetries; }
     }
 }

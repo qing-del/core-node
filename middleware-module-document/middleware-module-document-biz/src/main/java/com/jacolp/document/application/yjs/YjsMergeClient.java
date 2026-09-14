@@ -10,4 +10,9 @@ public interface YjsMergeClient {
      * Java 只传递不透明二进制数据，从不解析 Yjs 正文。
      */
     byte[] merge(byte[] baseState, List<byte[]> updates);
+
+    /**
+     * 合并状态并补齐 v0.7 注册节点的 nodeId/nodeVersion；Java 仍不解析 Yjs 正文。
+     */
+    YjsNodeIdentityMigrationResult migrateNodeIdentity(byte[] baseState, List<byte[]> updates);
 }

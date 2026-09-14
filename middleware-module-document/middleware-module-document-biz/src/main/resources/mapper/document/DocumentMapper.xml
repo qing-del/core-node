@@ -45,6 +45,14 @@
           AND deleted = 0
     </select>
 
+    <select id="selectByIdAfter" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE id &gt; #{afterId}
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
     <select id="listActiveByOwnerUserId" resultMap="DocumentMap">
         SELECT <include refid="DocumentColumns"/>
         FROM biz_document

@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 /** 通过 HTTP 调用隔离 Yjs 合并服务的适配器。 */
 @Component
@@ -19,6 +20,7 @@ import org.springframework.web.client.RestClientException;
 public class HttpYjsMergeClient implements YjsMergeClient {
 
     private static final String MERGE_PATH = "/internal/yjs/merge";
+    private static final String NODE_IDENTITY_MIGRATION_PATH = "/internal/yjs/node-identity/migrate";
 
     private final RestClient restClient;
     private final DocumentMetrics metrics;
@@ -67,10 +69,44 @@ public class HttpYjsMergeClient implements YjsMergeClient {
             return mergedState;
         } catch (YjsMergeException exception) {
             throw exception;
+        } catch (RestClientResponseException exception) {
+            throw new YjsMergeException("Yjs merge service returned HTTP " + exception.getStatusCode()
+                    + ": " + responseBody(exception), exception);
         } catch (RestClientException exception) {
             throw new YjsMergeException("Yjs merge service request failed", exception);
         } finally {
             metrics.completeYjsMerge(sample, failed);
         }
+    }
+
+    /** 调用独立节点身份迁移操作；正文遍历与属性写入仍由 Yjs 服务完成。 */
+    @Override
+    public YjsNodeIdentityMigrationResult migrateNodeIdentity(byte[] baseState, List<byte[]> updates) {
+        try {
+            YjsMergeRequest request = YjsMergeRequest.from(baseState, updates);
+            YjsNodeIdentityMigrationResponse response = restClient.post()
+                    .uri(NODE_IDENTITY_MIGRATION_PATH)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .body(YjsNodeIdentityMigrationResponse.class);
+            if (response == null) {
+                throw new YjsMergeException("Yjs node identity migration service returned an empty response");
+            }
+            return response.decode();
+        } catch (YjsMergeException exception) {
+            throw exception;
+        } catch (RestClientResponseException exception) {
+            throw new YjsMergeException("Yjs node identity migration service returned HTTP "
+                    + exception.getStatusCode() + ": " + responseBody(exception), exception);
+        } catch (RestClientException exception) {
+            throw new YjsMergeException("Yjs node identity migration request failed", exception);
+        }
+    }
+
+    /** 截断下游错误正文，保留节点路径等迁移诊断信息而不放大日志。 */
+    private static String responseBody(RestClientResponseException exception) {
+        String body = exception.getResponseBodyAsString();
+        return body.length() <= 500 ? body : body.substring(0, 500);
     }
 }

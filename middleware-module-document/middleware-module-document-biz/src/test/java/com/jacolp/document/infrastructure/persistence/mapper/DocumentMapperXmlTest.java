@@ -33,4 +33,20 @@ class DocumentMapperXmlTest {
                 .contains("du.document_id IS NOT NULL")
                 .contains("ORDER BY d.last_modify_time DESC, d.id DESC");
     }
+
+    @Test
+    void historicalMigrationShouldUseAnAscendingPrimaryKeyCursorWithoutFilteringDeletedRows() throws IOException {
+        String xml;
+        try (InputStream stream = getClass().getClassLoader()
+                .getResourceAsStream("mapper/document/DocumentMapper.xml")) {
+            xml = new String(Objects.requireNonNull(stream, "mapper XML must be on the test classpath").readAllBytes(),
+                    StandardCharsets.UTF_8);
+        }
+
+        assertThat(xml)
+                .contains("id=\"selectByIdAfter\"")
+                .contains("WHERE id &gt; #{afterId}")
+                .contains("ORDER BY id ASC")
+                .contains("LIMIT #{limit}");
+    }
 }

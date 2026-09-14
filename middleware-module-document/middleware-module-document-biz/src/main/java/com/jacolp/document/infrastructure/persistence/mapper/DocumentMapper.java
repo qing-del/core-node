@@ -20,6 +20,9 @@ public interface DocumentMapper {
     /** 按主键读取活跃文档；资源级访问由调用方统一校验。 */
     DocumentDO selectActiveById(@Param("id") Long id);
 
+    /** 按主键游标读取全部文档，供一次性历史迁移稳定遍历。 */
+    List<DocumentDO> selectByIdAfter(@Param("afterId") Long afterId, @Param("limit") Integer limit);
+
     /** 列出指定所有者的全部活跃文档。 */
     List<DocumentDO> listActiveByOwnerUserId(@Param("ownerUserId") Long ownerUserId);
 
