@@ -3,6 +3,7 @@ package com.jacolp.document.application.fileindex;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -66,8 +67,8 @@ class FileIndexProjectionServiceTest {
         verify(elasticsearchOperations).index(eq("file-v07"), eq("NOTE:7"), document.capture());
         assertThat(document.getValue()).isEqualTo(new FileIndexDocument("设计笔记", FileIndexResourceType.NOTE,
                 "7", null, List.of("42"), true, false));
-        verify(mediaFileIndexApi, never()).findById(any());
-        verify(documentMapper, never()).selectById(any());
+        verify(mediaFileIndexApi, never()).findById(anyLong());
+        verify(documentMapper, never()).selectById(anyLong());
     }
 
     @Test
@@ -119,7 +120,7 @@ class FileIndexProjectionServiceTest {
     }
 
     @Test
-    void rebuildsAllSourcesAfterClearingTheExistingProjection() {
+    void rebuildsAllSourcesAfterClearingTheExistingProjection() throws Exception {
         when(noteFileIndexApi.listAfterId(0L, FileIndexProjectionService.DEFAULT_PAGE_SIZE)).thenReturn(List.of(
                 new NoteFileIndexSource(7L, 42L, "笔记", false, true)));
         when(mediaFileIndexApi.listAfterId(0L, FileIndexProjectionService.DEFAULT_PAGE_SIZE)).thenReturn(List.of(
