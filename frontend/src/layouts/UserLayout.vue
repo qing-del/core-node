@@ -52,8 +52,8 @@ function handleLogout() {
 onMounted(async () => {
   try {
     await authStore.fetchUserInfo()
-  } catch {
-    // request.ts already provides the user-facing, credential-safe feedback.
+  } catch (error) {
+    console.error('获取用户信息失败', error)
   } finally {
     isLoading.value = false
   }

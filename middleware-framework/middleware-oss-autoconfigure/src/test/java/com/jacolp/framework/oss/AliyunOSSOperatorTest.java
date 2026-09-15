@@ -3,7 +3,6 @@ package com.jacolp.framework.oss;
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.OSS;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
@@ -16,7 +15,7 @@ class AliyunOSSOperatorTest {
     void reportsClientFailuresInsteadOfReturningFalseSuccess() {
         AliyunOSSProperties properties = new AliyunOSSProperties();
         properties.setBucketName("bucket");
-        AliyunOSSClient client = Mockito.mock(AliyunOSSClient.class);
+        AliyunOSSClient client = mock(AliyunOSSClient.class);
         OSS oss = mock(OSS.class);
         when(client.getOssClient()).thenReturn(oss);
         doThrow(new ClientException("network unavailable"))

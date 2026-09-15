@@ -1,8 +1,7 @@
 package com.jacolp.middleware.module.system.biz.domain.quota;
 
-import com.jacolp.system.api.quota.QuotaType;
-import com.jacolp.system.domain.quota.UserQuotaPolicy;
-import org.junit.jupiter.api.Assertions;
+import com.jacolp.module.system.api.quota.QuotaType;
+import com.jacolp.module.system.biz.domain.quota.UserQuotaPolicy;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,7 +12,7 @@ class UserQuotaPolicyTest {
 
     @Test
     void preservesConsumptionBoundaryAndUsedValueNormalization() {
-        Assertions.assertTrue(UserQuotaPolicy.canConsume(10L, 10L));
+        assertTrue(UserQuotaPolicy.canConsume(10L, 10L));
         assertFalse(UserQuotaPolicy.canConsume(11L, 10L));
         assertTrue(UserQuotaPolicy.canConsume(-1L, 0L));
         assertEquals(0L, UserQuotaPolicy.usedOrZero(null));
