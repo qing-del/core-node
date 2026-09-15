@@ -19,7 +19,8 @@ import org.springframework.stereotype.Component;
 
 /** Canal 增量拉取器：Rabbit 发布确认成功后 ACK，失败则 rollback 当前 batch。 */
 @Component
-@ConditionalOnProperty(prefix = "jacolp.document.file-index.canal", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "jacolp.document.file-index", name = {"enabled", "canal.enabled"},
+        havingValue = "true")
 public class FileIndexCanalPoller {
 
     private static final Logger log = LoggerFactory.getLogger(FileIndexCanalPoller.class);

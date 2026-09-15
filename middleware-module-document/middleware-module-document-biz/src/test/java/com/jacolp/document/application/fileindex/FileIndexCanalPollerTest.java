@@ -1,5 +1,6 @@
 package com.jacolp.document.application.fileindex;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -15,8 +16,26 @@ import com.jacolp.document.config.FileIndexCanalProperties;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 
 class FileIndexCanalPollerTest {
+
+    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+            .withUserConfiguration(TestConfiguration.class);
+
+    @Test
+    void doesNotCreatePollerWhenCanalIsEnabledButFileIndexIsDisabled() {
+        contextRunner.withPropertyValues("jacolp.document.file-index.canal.enabled=true")
+                .run(context -> assertThat(context).doesNotHaveBean(FileIndexCanalPoller.class));
+    }
+
+    @Test
+    void doesNotCreatePollerWhenFileIndexIsEnabledButCanalIsDisabled() {
+        contextRunner.withPropertyValues("jacolp.document.file-index.enabled=true")
+                .run(context -> assertThat(context).doesNotHaveBean(FileIndexCanalPoller.class));
+    }
 
     @Test
     void acknowledgesOnlyAfterRabbitPublishSucceeds() {
@@ -61,5 +80,10 @@ class FileIndexCanalPollerTest {
         verify(connector).rollback(18L);
         verify(connector, never()).ack(18L);
         poller.disconnect();
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @Import(FileIndexCanalPoller.class)
+    static class TestConfiguration {
     }
 }
