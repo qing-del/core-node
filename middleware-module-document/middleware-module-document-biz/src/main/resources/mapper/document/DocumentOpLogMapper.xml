@@ -22,7 +22,7 @@
             (#{log.documentId}, #{log.redisOpId}, #{log.clientUpdateId}, #{log.updateData},
              #{log.operatorId}, #{log.operatorType}, #{log.createTime})
         </foreach>
-        ON DUPLICATE KEY UPDATE id = id
+        ON DUPLICATE KEY UPDATE document_id = document_id
     </insert>
 
     <select id="selectByDocumentIdAfterId" resultMap="DocumentOpLogMap">
