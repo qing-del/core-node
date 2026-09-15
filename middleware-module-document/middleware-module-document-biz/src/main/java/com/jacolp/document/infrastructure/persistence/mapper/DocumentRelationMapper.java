@@ -15,6 +15,11 @@ public interface DocumentRelationMapper {
     /** 创建一条当前有效的文档关系。 */
     int insert(DocumentRelationDO relation);
 
+    /** 从现有活动关系复制资源节点，供重复 resourceReference 迁移创建独立关系。 */
+    int cloneActiveBySourceDocumentIdAndRefId(@Param("sourceDocumentId") Long sourceDocumentId,
+                                              @Param("sourceRefId") String sourceRefId,
+                                              @Param("targetRefId") String targetRefId);
+
     /** 恢复关系并切换到当前 resource node。 */
     int activateBySourceDocumentIdAndRefId(@Param("sourceDocumentId") Long sourceDocumentId,
                                            @Param("refId") String refId,

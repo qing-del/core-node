@@ -13,6 +13,13 @@ export interface YjsMergeResponse {
 export interface YjsNodeIdentityMigrationResponse extends YjsMergeResponse {
   changed: boolean;
   registeredNodeCount: number;
+  resourceReferenceRemaps: ResourceReferenceIdentityRemap[];
+}
+
+/** 重复资源引用迁移后的旧、新 refId 对；二者均为规范化小写 UUID。 */
+export interface ResourceReferenceIdentityRemap {
+  previousRefId: string;
+  refId: string;
 }
 
 export class InvalidMergeRequestError extends Error {
@@ -50,6 +57,7 @@ export function migrateYjsNodeIdentity(
     ...encodeMergedState(document),
     changed: migration.changed,
     registeredNodeCount: migration.registeredNodeCount,
+    resourceReferenceRemaps: migration.resourceReferenceRemaps,
   };
 }
 
@@ -81,10 +89,13 @@ function encodeMergedState(document: Y.Doc): YjsMergeResponse {
 function normalizeNodeIdentity(document: Y.Doc): {
   changed: boolean;
   registeredNodeCount: number;
+  resourceReferenceRemaps: ResourceReferenceIdentityRemap[];
 } {
   const content = document.getXmlFragment('content');
   let changed = false;
   let registeredNodeCount = 0;
+  const usedNodeIds = new Set<string>();
+  const resourceReferenceRemaps: ResourceReferenceIdentityRemap[] = [];
 
   for (const candidate of content.createTreeWalker((node) => node instanceof Y.XmlElement)) {
     if (!(candidate instanceof Y.XmlElement) || !REGISTERED_NODE_NAMES.has(candidate.nodeName)) {
@@ -95,13 +106,17 @@ function normalizeNodeIdentity(document: Y.Doc): {
     const node = candidate as IdentityXmlElement;
     const path = nodePath(node);
     if (node.nodeName === 'resourceReference') {
-      changed = normalizeResourceReference(node, path) || changed;
+      const normalization = normalizeResourceReference(node, path, usedNodeIds);
+      changed = normalization.changed || changed;
+      if (normalization.remap) resourceReferenceRemaps.push(normalization.remap);
     } else {
       changed = normalizeTextNode(node, path) || changed;
+      const nodeId = node.getAttribute('nodeId');
+      if (typeof nodeId === 'string') usedNodeIds.add(normalizeNodeId(nodeId));
     }
   }
 
-  return { changed, registeredNodeCount };
+  return { changed, registeredNodeCount, resourceReferenceRemaps };
 }
 
 /** v0.7 首发注册的纯文本节点与资源引用节点。 */
@@ -137,7 +152,10 @@ function normalizeTextNode(node: IdentityXmlElement, path: string): boolean {
 }
 
 /** 按 refId 补齐资源引用身份，并沿用 nodeVersion 语义。 */
-function normalizeResourceReference(node: IdentityXmlElement, path: string): boolean {
+function normalizeResourceReference(node: IdentityXmlElement, path: string, usedNodeIds: Set<string>): {
+  changed: boolean;
+  remap: ResourceReferenceIdentityRemap | null;
+} {
   const refId = node.getAttribute('refId');
   if (typeof refId !== 'string' || refId.trim() === '') {
     throw new NodeIdentityMigrationError(`${path}: resourceReference.refId is required`);
@@ -164,7 +182,21 @@ function normalizeResourceReference(node: IdentityXmlElement, path: string): boo
     validateNodeVersion(nodeVersion, path);
   }
 
-  return changed;
+  const normalizedRefId = normalizeNodeId(refId);
+  if (usedNodeIds.has(normalizedRefId)) {
+    const replacementRefId = createUniqueNodeId(usedNodeIds);
+    node.setAttribute('nodeId', replacementRefId);
+    node.setAttribute('refId', replacementRefId);
+    changed = true;
+    usedNodeIds.add(replacementRefId);
+    return {
+      changed,
+      remap: { previousRefId: normalizedRefId, refId: replacementRefId },
+    };
+  }
+  usedNodeIds.add(normalizedRefId);
+
+  return { changed, remap: null };
 }
 
 /** 校验已有节点身份；已有非法值不被迁移任务静默覆盖。 */
@@ -188,6 +220,20 @@ function isMissing(value: unknown): value is null | undefined | '' {
 
 /** UUID v4/v1 等标准 UUID 字符串校验。 */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** 统一 UUID 大小写，使 Yjs 属性与 Java UUID/关系表的键语义一致。 */
+function normalizeNodeId(value: string): string {
+  return value.toLowerCase();
+}
+
+/** 生成未被本次正文遍历占用的新 UUID。 */
+function createUniqueNodeId(usedNodeIds: ReadonlySet<string>): string {
+  let nodeId = randomUUID();
+  while (usedNodeIds.has(normalizeNodeId(nodeId))) {
+    nodeId = randomUUID();
+  }
+  return nodeId;
+}
 
 /** 返回当前节点在 content 树中的稳定可读路径，便于结构化错误定位。 */
 function nodePath(node: IdentityXmlElement): string {

@@ -25,6 +25,16 @@
             (#{sourceDocumentId}, #{refId}, #{resourceNodeId}, #{deleted})
     </insert>
 
+    <insert id="cloneActiveBySourceDocumentIdAndRefId">
+        INSERT INTO biz_document_relation
+            (source_document_id, ref_id, resource_node_id, is_delete)
+        SELECT source_document_id, #{targetRefId}, resource_node_id, 0
+        FROM biz_document_relation
+        WHERE source_document_id = #{sourceDocumentId}
+          AND ref_id = #{sourceRefId}
+          AND is_delete = 0
+    </insert>
+
     <update id="activateBySourceDocumentIdAndRefId">
         UPDATE biz_document_relation
         SET resource_node_id = #{resourceNodeId},

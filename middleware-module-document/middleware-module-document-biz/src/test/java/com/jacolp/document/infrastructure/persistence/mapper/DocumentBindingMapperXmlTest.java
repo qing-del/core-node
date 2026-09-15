@@ -29,6 +29,7 @@ class DocumentBindingMapperXmlTest {
         assertThat(xml).contains("source_document_id")
                 .contains("ref_id")
                 .contains("id=\"selectBySourceDocumentIdAndRefId\"")
+                .contains("id=\"cloneActiveBySourceDocumentIdAndRefId\"")
                 .contains("id=\"activateBySourceDocumentIdAndRefId\"")
                 .contains("id=\"softDeleteBySourceDocumentIdAndRefId\"")
                 .contains("SET is_delete = 1")

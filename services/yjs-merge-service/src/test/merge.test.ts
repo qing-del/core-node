@@ -185,6 +185,29 @@ test('resource reference identity accepts UUIDs that differ only by case', () =>
   assert.equal(result.registeredNodeCount, 1);
 });
 
+test('duplicate resource references receive a paired identity remap', () => {
+  const source = new Y.Doc();
+  const first = resourceReference('550e8400-e29b-41d4-a716-446655440005');
+  const duplicate = resourceReference('550e8400-e29b-41d4-a716-446655440005');
+  duplicate.removeAttribute('nodeVersion');
+  source.getXmlFragment('content').insert(0, [first, duplicate]);
+
+  const result = migrateYjsNodeIdentity({
+    baseState: toBase64(Y.encodeStateAsUpdate(source)),
+    updates: [],
+  });
+  const content = readXml(result.mergedState).getXmlFragment('content');
+  const migratedDuplicate = content.get(1) as Y.XmlElement;
+
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.resourceReferenceRemaps.map(remap => remap.previousRefId),
+    ['550e8400-e29b-41d4-a716-446655440005']);
+  assert.match(result.resourceReferenceRemaps[0].refId, UUID_PATTERN);
+  assert.equal(migratedDuplicate.getAttribute('nodeId'), result.resourceReferenceRemaps[0].refId);
+  assert.equal(migratedDuplicate.getAttribute('refId'), result.resourceReferenceRemaps[0].refId);
+  assert.equal(migratedDuplicate.getAttribute('nodeVersion'), 0);
+});
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function toBase64(update: Uint8Array): string {
@@ -206,4 +229,12 @@ function readXml(mergedState: string): Y.Doc {
 function setNodeVersion(node: Y.XmlElement, value: number): void {
   (node as unknown as Y.XmlElement<{ [key: string]: string | number | null }>)
     .setAttribute('nodeVersion', value);
+}
+
+function resourceReference(refId: string): Y.XmlElement {
+  const reference = new Y.XmlElement('resourceReference');
+  reference.setAttribute('nodeId', refId);
+  reference.setAttribute('refId', refId);
+  setNodeVersion(reference, 0);
+  return reference;
 }

@@ -3,6 +3,7 @@ package com.jacolp.document.application.migration;
 import com.jacolp.document.application.compact.DocumentSnapshotStorage;
 import com.jacolp.document.application.yjs.YjsMergeClient;
 import com.jacolp.document.application.yjs.YjsNodeIdentityMigrationResult;
+import com.jacolp.document.application.yjs.YjsResourceReferenceRemap;
 import com.jacolp.document.config.DocumentProperties;
 import com.jacolp.document.infrastructure.persistence.dataobject.DocumentDO;
 import com.jacolp.document.infrastructure.persistence.dataobject.DocumentOpLogDO;
@@ -11,6 +12,7 @@ import com.jacolp.document.infrastructure.persistence.mapper.DocumentOpLogMapper
 import com.jacolp.document.infrastructure.redis.DocumentRedisRepository;
 import com.jacolp.document.infrastructure.redis.StoredDocumentPendingUpdate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -31,6 +33,7 @@ public class DocumentNodeIdentityMigrationService {
     private final DocumentRedisRepository redisRepository;
     private final YjsMergeClient yjsMergeClient;
     private final DocumentProperties properties;
+    private final DocumentNodeIdentityMigrationPersistence migrationPersistence;
 
     /** 保存迁移任务需要的持久化、Redis、对象存储和 Yjs 适配器。 */
     public DocumentNodeIdentityMigrationService(DocumentMapper documentMapper,
@@ -38,13 +41,16 @@ public class DocumentNodeIdentityMigrationService {
                                                  DocumentSnapshotStorage snapshotStorage,
                                                  DocumentRedisRepository redisRepository,
                                                  YjsMergeClient yjsMergeClient,
-                                                 DocumentProperties properties) {
+                                                 DocumentProperties properties,
+                                                 DocumentNodeIdentityMigrationPersistence migrationPersistence) {
         this.documentMapper = Objects.requireNonNull(documentMapper, "documentMapper must not be null");
         this.documentOpLogMapper = Objects.requireNonNull(documentOpLogMapper, "documentOpLogMapper must not be null");
         this.snapshotStorage = Objects.requireNonNull(snapshotStorage, "snapshotStorage must not be null");
         this.redisRepository = Objects.requireNonNull(redisRepository, "redisRepository must not be null");
         this.yjsMergeClient = Objects.requireNonNull(yjsMergeClient, "yjsMergeClient must not be null");
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
+        this.migrationPersistence = Objects.requireNonNull(migrationPersistence,
+                "migrationPersistence must not be null");
     }
 
     /** 按主键游标扫描全部文档，单个文档失败不阻断其他文档迁移。 */
@@ -117,9 +123,15 @@ public class DocumentNodeIdentityMigrationService {
             }
 
             String objectKey = snapshotStorage.write(documentId, state.state());
-            int affected = documentMapper.updateSnapshotPointerIfPersistedLogId(documentId,
-                    persistedLogId(document), objectKey, state.cutoffLogId());
-            if (affected == 1) {
+            boolean replaced;
+            try {
+                replaced = migrationPersistence.replaceSnapshotAndCloneRelations(documentId, persistedLogId(document),
+                        objectKey, state.cutoffLogId(), state.resourceReferenceRemaps());
+            } catch (RuntimeException exception) {
+                discardUnreferencedSnapshot(documentId, objectKey);
+                throw exception;
+            }
+            if (replaced) {
                 cleanupCoveredLogs(documentId, state.cutoffLogId());
                 return new DocumentNodeIdentityMigrationOutcome(documentId,
                         DocumentNodeIdentityMigrationOutcome.Status.MIGRATED, state.cutoffLogId(), objectKey);
@@ -143,6 +155,7 @@ public class DocumentNodeIdentityMigrationService {
         byte[] state = snapshotStorage.read(document.getContentObjectKey());
         boolean changed = false;
         long registeredNodeCount = 0L;
+        LinkedHashSet<YjsResourceReferenceRemap> resourceReferenceRemaps = new LinkedHashSet<>();
 
         List<byte[]> durableBytes = durableUpdates.stream().map(DocumentOpLogDO::getUpdateData).toList();
         List<byte[]> pendingBytes = pendingUpdates.stream().map(update -> update.update().updateData()).toList();
@@ -158,6 +171,7 @@ public class DocumentNodeIdentityMigrationService {
             state = result.mergedState();
             changed = changed || result.changed();
             registeredNodeCount = result.registeredNodeCount();
+            resourceReferenceRemaps.addAll(result.resourceReferenceRemaps());
         }
 
         log.debug("document node identity migration state prepared documentId={} durableUpdates={} pendingUpdates={} "
@@ -166,7 +180,7 @@ public class DocumentNodeIdentityMigrationService {
         long cutoffLogId = durableUpdates.isEmpty()
                 ? basePersistedLogId
                 : durableUpdates.get(durableUpdates.size() - 1).getId();
-        return new MigrationState(state, changed, cutoffLogId);
+        return new MigrationState(state, changed, cutoffLogId, List.copyOf(resourceReferenceRemaps));
     }
 
     /** 分页读取快照位点之后的持久化日志，并校验日志 ID 与二进制更新有效。 */
@@ -256,6 +270,7 @@ public class DocumentNodeIdentityMigrationService {
     }
 
     /** 保留本轮 Yjs 状态、是否发生补齐和可安全推进的持久化日志位点。 */
-    private record MigrationState(byte[] state, boolean changed, long cutoffLogId) {
+    private record MigrationState(byte[] state, boolean changed, long cutoffLogId,
+                                  List<YjsResourceReferenceRemap> resourceReferenceRemaps) {
     }
 }

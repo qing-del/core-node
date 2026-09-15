@@ -235,7 +235,13 @@ function collectIdentityUpdates(
     const identityConflict = node.type.name === RESOURCE_REFERENCE_NODE_NAME
       && hasResourceReferenceIdentityMismatch({ nodeId: currentNodeId, refId: currentRefId })
     let nodeId = isValidCrdtNodeId(currentNodeId) ? currentNodeId : null
-    if (!identityConflict && (!nodeId || used.has(nodeId.toLowerCase()))) {
+    const duplicateNodeId = nodeId !== null && used.has(nodeId.toLowerCase())
+    // 重复资源引用还需要后端复制关系投影；前端不能只改 nodeId 而留下失配的 refId。
+    const deferDuplicateResourceReference = node.type.name === RESOURCE_REFERENCE_NODE_NAME
+      && duplicateNodeId
+      && isValidCrdtNodeId(currentRefId)
+      && nodeId.toLowerCase() === currentRefId.toLowerCase()
+    if (!identityConflict && (!nodeId || duplicateNodeId) && !deferDuplicateResourceReference) {
       const legacyRefId = node.type.name === RESOURCE_REFERENCE_NODE_NAME && isValidCrdtNodeId(currentRefId)
         ? currentRefId
         : null

@@ -170,6 +170,31 @@ test('preserves remote nodeVersion when a remote transaction changes node conten
   assert.equal(state.doc.firstChild?.attrs.nodeVersion, 7)
 })
 
+test('leaves duplicate resource reference identities paired for server-side migration', () => {
+  const schema = createSchema()
+  const first = resourceReference(schema, REFERENCE_ID, REFERENCE_ID)
+  const duplicate = resourceReference(schema, REFERENCE_ID, REFERENCE_ID)
+  const doc = schema.node('doc', null, [
+    schema.node('paragraph', { nodeId: PARAGRAPH_ID, nodeVersion: 0 }, [first, duplicate])
+  ])
+  let state = EditorState.create({ schema, doc, plugins: [createIdentityPlugin(() => crypto.randomUUID())] })
+
+  state = apply(state, state.tr.insertText('!', 1))
+  const references: Array<{ nodeId: string; refId: string }> = []
+  state.doc.descendants(node => {
+    if (node.type.name === 'resourceReference') references.push({
+      nodeId: node.attrs.nodeId,
+      refId: node.attrs.refId
+    })
+    return true
+  })
+
+  assert.deepEqual(references, [
+    { nodeId: REFERENCE_ID, refId: REFERENCE_ID },
+    { nodeId: REFERENCE_ID, refId: REFERENCE_ID }
+  ])
+})
+
 test('remaps every registered node for copy, paste and import without mutating the source', () => {
   const schema = createSchema()
   const source = schema.node('doc', null, [
