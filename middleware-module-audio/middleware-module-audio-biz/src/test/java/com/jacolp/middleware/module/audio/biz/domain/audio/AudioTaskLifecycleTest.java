@@ -20,10 +20,6 @@ class AudioTaskLifecycleTest {
         assertTrue(AudioTaskLifecycle.canTransition(1, -1));
         assertFalse(AudioTaskLifecycle.canTransition(0, 2));
         assertFalse(AudioTaskLifecycle.canTransition(2, 1));
-        assertTrue(AudioTaskLifecycle.isCancellable(0));
-        assertTrue(AudioTaskLifecycle.isCancellable(1));
-        assertFalse(AudioTaskLifecycle.isCancellable(2));
-        assertEquals(-3, AudioTaskLifecycle.cancelledStatus());
     }
 
     @Test

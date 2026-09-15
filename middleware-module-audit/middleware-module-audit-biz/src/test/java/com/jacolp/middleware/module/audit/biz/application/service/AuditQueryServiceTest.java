@@ -11,19 +11,28 @@ import com.jacolp.module.audit.biz.application.vo.NoteAuditVO;
 import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.ImageAuditMapper;
 import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.MetaAuditMapper;
 import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.NoteAuditMapper;
+import com.jacolp.module.media.api.MediaFileApi;
+import com.jacolp.module.note.api.NoteReadApi;
+import com.jacolp.module.system.api.UserProfileApi;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AuditQueryServiceTest {
     private MetaAuditMapper metaMapper;
     private ImageAuditMapper imageMapper;
     private NoteAuditMapper noteMapper;
+    private UserProfileApi userProfileApi;
+    private NoteReadApi noteReadApi;
+    private MediaFileApi mediaFileApi;
     private AuditQueryService service;
 
     @BeforeEach
@@ -31,45 +40,46 @@ class AuditQueryServiceTest {
         metaMapper = mock(MetaAuditMapper.class);
         imageMapper = mock(ImageAuditMapper.class);
         noteMapper = mock(NoteAuditMapper.class);
-        service = new AuditQueryService(metaMapper, imageMapper, noteMapper);
+        userProfileApi = mock(UserProfileApi.class);
+        noteReadApi = mock(NoteReadApi.class);
+        mediaFileApi = mock(MediaFileApi.class);
+        service = new AuditQueryService(metaMapper, imageMapper, noteMapper, userProfileApi, noteReadApi, mediaFileApi);
+        when(userProfileApi.getProfilesByIds(anyCollection())).thenReturn(Map.of());
+        when(noteReadApi.findTagSummariesByIds(anyCollection())).thenReturn(Map.of());
+        when(noteReadApi.findNoteSummariesByIds(anyCollection())).thenReturn(Map.of());
+        when(mediaFileApi.findByIds(anyCollection())).thenReturn(Map.of());
     }
 
     @AfterEach
-    void clearPage() {
-        PageHelper.clearPage();
-    }
+    void clearPage() { PageHelper.clearPage(); }
 
     @Test
-    void metaListReturnsProjectionFieldsSelectedByAuditMapper() {
+    void metaListUsesOneUserAndOneTagBatchLookup() {
         MetaAuditVO record = new MetaAuditVO();
-        record.setApplicantUsername("applicant");
-        record.setReviewerUsername("reviewer");
-        record.setTargetName("tag");
+        record.setApplicantUserId(1L); record.setReviewerUserId(2L); record.setTargetId(3L);
         when(metaMapper.listByCondition(null, null, null)).thenReturn(List.of(record));
-
-        assertThat(service.listMetaAudits(new MetaAuditListDTO()).getRecords()).containsExactly(record);
+        service.listMetaAudits(new MetaAuditListDTO());
+        verify(userProfileApi, times(1)).getProfilesByIds(anyCollection());
+        verify(noteReadApi, times(1)).findTagSummariesByIds(anyCollection());
     }
 
     @Test
-    void imageListReturnsProjectionFieldsSelectedByAuditMapper() {
+    void imageListUsesOneUserAndOneMediaBatchLookup() {
         ImageAuditVO record = new ImageAuditVO();
-        record.setApplicantUsername("applicant");
-        record.setReviewerUsername("reviewer");
-        record.setFilename("image.png");
-        record.setOssUrl("https://cdn.example/image.png");
+        record.setApplicantUserId(1L); record.setReviewerUserId(2L); record.setImageId(3L);
         when(imageMapper.listByCondition(null, null)).thenReturn(List.of(record));
-
-        assertThat(service.listImageAudits(new ImageAuditListDTO()).getRecords()).containsExactly(record);
+        service.listImageAudits(new ImageAuditListDTO());
+        verify(userProfileApi, times(1)).getProfilesByIds(anyCollection());
+        verify(mediaFileApi, times(1)).findByIds(anyCollection());
     }
 
     @Test
-    void noteListReturnsProjectionFieldsSelectedByAuditMapper() {
+    void noteListUsesOneUserAndOneNoteBatchLookup() {
         NoteAuditVO record = new NoteAuditVO();
-        record.setApplicantUsername("applicant");
-        record.setReviewerUsername("reviewer");
-        record.setNoteTitle("note");
+        record.setApplicantUserId(1L); record.setReviewerUserId(2L); record.setNoteId(3L);
         when(noteMapper.listByCondition(null, null)).thenReturn(List.of(record));
-
-        assertThat(service.listNoteAudits(new NoteAuditListDTO()).getRecords()).containsExactly(record);
+        service.listNoteAudits(new NoteAuditListDTO());
+        verify(userProfileApi, times(1)).getProfilesByIds(anyCollection());
+        verify(noteReadApi, times(1)).findNoteSummariesByIds(anyCollection());
     }
 }

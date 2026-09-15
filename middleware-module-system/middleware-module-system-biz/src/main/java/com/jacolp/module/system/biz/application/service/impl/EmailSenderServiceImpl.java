@@ -2,31 +2,30 @@ package com.jacolp.module.system.biz.application.service.impl;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
-import com.jacolp.middleware.messaging.pulisher.EmailSendEventPublisher;
-import com.jacolp.middleware.messaging.event.EmailSendRequestedEvent;
 import com.jacolp.module.system.biz.infrastructure.persistence.dataobject.UserDO;
 import com.jacolp.module.system.biz.infrastructure.persistence.mapper.UserMapper;
 import com.jacolp.middleware.common.security.token.TokenSessionService;
 import com.jacolp.module.system.biz.application.service.EmailSenderService;
 import com.jacolp.module.system.biz.application.dto.email.EmailSendDTO;
 import com.jacolp.module.system.biz.application.dto.email.EmailResultDTO;
+import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 @Service
 @Slf4j
-@Transactional(rollbackFor = Exception.class)
 public class EmailSenderServiceImpl implements EmailSenderService {
+    // 依赖提供的 Bean
+    @Autowired private JavaMailSender mailSender;
     @Autowired private TemplateEngine templateEngine;
-    @Autowired private EmailSendEventPublisher emailEventPublisher;
 
     // 配置
     @Autowired private TokenSessionService tokenSessionService;
@@ -36,6 +35,9 @@ public class EmailSenderServiceImpl implements EmailSenderService {
 
     @Value("${jacolp.base-url}")
     private String baseUrl;
+
+    @Value("${spring.mail.username}")
+    private String from;
 
     @Override
     public String sendActivationEmail(UserDO user) {
@@ -58,9 +60,9 @@ public class EmailSenderServiceImpl implements EmailSenderService {
         // 渲染邮件内容
         String html = templateEngine.process("email/activation", ctx);
 
-        emailEventPublisher.publish(List.of(new EmailSendRequestedEvent(user.getEmail(),
-                "CoreNode 账号激活", html, "ACTIVATION", "activation:" + user.getId())));
-        log.info("Activation email queued for userId: {}", user.getId());
+        // 发送邮件
+        sendHtmlMail(user.getEmail(), "CoreNode 账号激活", html);
+        log.info("Activation email sent to: {}", user.getEmail());
         return token;
     }
 
@@ -92,20 +94,50 @@ public class EmailSenderServiceImpl implements EmailSenderService {
             return new EmailResultDTO(0, 0, "无有效收件人");
         }
 
-        List<EmailSendRequestedEvent> requests = new ArrayList<>();
+        // 循环发送邮件
+        int success = 0, fail = 0;
         for (String to : recipients) {
-            String html = dto.getBody();
-            if (dto.getTemplateName() != null && !dto.getTemplateName().isEmpty()) {
-                Context ctx = new Context();
-                ctx.setVariable("subject", dto.getSubject());
-                ctx.setVariable("body", dto.getBody());
-                html = templateEngine.process("email/" + dto.getTemplateName(), ctx);
+            try {
+                if (dto.getTemplateName() != null && !dto.getTemplateName().isEmpty()) {
+                    Context ctx = new Context();
+                    ctx.setVariable("subject", dto.getSubject());
+                    ctx.setVariable("body", dto.getBody());
+                    String html = templateEngine.process("email/" + dto.getTemplateName(), ctx);
+                    sendHtmlMail(to, dto.getSubject(), html);
+                } else {
+                    sendHtmlMail(to, dto.getSubject(), dto.getBody());
+                }
+                success++;
+            } catch (Exception e) {
+                log.error("Failed to send email to {}: {}", to, e.getMessage());
+                fail++;
             }
-            requests.add(new EmailSendRequestedEvent(to, dto.getSubject(), html,
-                    "CUSTOM", "custom:" + UUID.randomUUID()));
         }
-        int queued = emailEventPublisher.publish(requests);
-        return new EmailResultDTO(queued, 0, String.format("已进入发送队列：%d 封", queued));
+
+        return new EmailResultDTO(success, fail,
+                String.format("发送完成：成功 %d，失败 %d", success, fail));
+    }
+
+    /**
+     * 发送 HTML 邮件
+     * @param to 收件人
+     * @param subject 邮件主题
+     * @param htmlContent HTML 内容
+     */
+    @Override
+    public void sendHtmlMail(String to, String subject, String htmlContent) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(from);   // 发件人
+            helper.setTo(to);   // 收件人
+            helper.setSubject(subject); // 邮件主题
+            helper.setText(htmlContent, true);  // HTML 内容
+            mailSender.send(message);
+        } catch (Exception e) {
+            log.error("Failed to send email to {}: {}", to, e.getMessage());
+            throw new RuntimeException("邮件发送失败: " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -115,7 +147,7 @@ public class EmailSenderServiceImpl implements EmailSenderService {
 
         // 存储验证码到 Redis
         tokenSessionService.saveEmailChangeCode(code, user.getId(), newEmail);
-        log.info("Email change code generated for userId: {}", user.getId());
+        log.info("Email change code generated for user: {}, new email: {}", user.getId(), newEmail);
 
         // 构建邮件内容
         Context ctx = new Context();
@@ -125,9 +157,9 @@ public class EmailSenderServiceImpl implements EmailSenderService {
         ctx.setVariable("expiryMinutes", tokenSessionService.emailChangeCodeExpiryMinutes());
         String html = templateEngine.process("email/email-change", ctx);
 
-        emailEventPublisher.publish(List.of(new EmailSendRequestedEvent(newEmail,
-                "CoreNode 邮箱修改验证", html, "EMAIL_CHANGE", "email-change:" + user.getId())));
-        log.info("Email change code queued for userId: {}", user.getId());
+        // 发送 HTML 邮件
+        sendHtmlMail(newEmail, "CoreNode 邮箱修改验证", html);
+        log.info("Email change code sent to: {}", newEmail);
     }
 
     /**

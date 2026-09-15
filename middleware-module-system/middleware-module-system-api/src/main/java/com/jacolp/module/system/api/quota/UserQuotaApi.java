@@ -13,7 +13,4 @@ public interface UserQuotaApi {
     ConsumeQuotaResult consume(ConsumeQuotaCommand command);
 
     void rollback(ConsumeQuotaCommand command);
-
-    /** Atomically releases committed storage; historical underflow is rejected for retry/manual repair. */
-    void releaseStorage(long userId, long amountBytes);
 }

@@ -26,6 +26,7 @@ import com.jacolp.module.audit.api.AuditApplicationApi;
 import com.jacolp.module.audit.api.AuditTargetType;
 import com.jacolp.module.audit.api.CancelAuditApplicationCommand;
 import com.jacolp.module.audit.api.CreateAuditApplicationCommand;
+import com.jacolp.module.audit.api.PendingAuditApplicationQuery;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -41,7 +42,7 @@ public class NoteCoreServiceImpl implements NoteCoreService {
 
     @Autowired private NoteMapper noteMapper;
 
-    @Autowired private AuditApplicationApi auditApi;
+    @Autowired private AuditApplicationApi auditApplicationApi;
 
     @Override
     public void update(NoteDO noteEntity) {
@@ -214,13 +215,17 @@ public class NoteCoreServiceImpl implements NoteCoreService {
             throw new BaseException(NoteConstant.NOTE_STATUS_NOT_ALLOWED);
         }
 
-        if (noteMapper.updateStatusIfCurrent(noteId, status.getCode(), NoteStatus.PENDING_AUDIT.getCode()) != 1) {
+        // 检查是否存在待审核申请
+        if (auditApplicationApi.hasPendingApplication(new PendingAuditApplicationQuery(AuditTargetType.NOTE, noteId))) {
             throw new BaseException(NoteConstant.NOTE_AUDIT_PENDING);
         }
-        auditApi.createApplication(new CreateAuditApplicationCommand(AuditTargetType.NOTE, noteId, userId,
-                null, note.getTitle(), null));
+
+        auditApplicationApi.createApplication(new CreateAuditApplicationCommand(
+                AuditTargetType.NOTE, noteId, userId, null));
 
         // 更新笔记状态
+        note.setStatus(NoteStatus.PENDING_AUDIT.getCode());
+        update(note);
     }
 
     /**
@@ -243,14 +248,12 @@ public class NoteCoreServiceImpl implements NoteCoreService {
             throw new BaseException(NoteConstant.NOTE_STATUS_NOT_ALLOWED);
         }
 
-        auditApi.cancelApplication(new CancelAuditApplicationCommand(AuditTargetType.NOTE, noteId,
-                BaseContext.getCurrentId()));
+        auditApplicationApi.cancelApplication(new CancelAuditApplicationCommand(
+                AuditTargetType.NOTE, noteId, note.getUserId()));
 
         // 状态回退到 CONVERTED
-        if (noteMapper.updateStatusIfCurrent(noteId, NoteStatus.PENDING_AUDIT.getCode(),
-                NoteStatus.CONVERTED.getCode()) != 1) {
-            throw new BaseException(NoteConstant.NOTE_STATUS_NOT_ALLOWED);
-        }
+        note.setStatus(NoteStatus.CONVERTED.getCode());
+        update(note);
     }
 
     // ==================== 用户端查询 ====================
