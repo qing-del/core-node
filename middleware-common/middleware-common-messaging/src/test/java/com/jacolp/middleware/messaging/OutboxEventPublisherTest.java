@@ -4,11 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.util.List;
 
-import com.jacolp.middleware.messaging.base.EventEnvelope;
-import com.jacolp.middleware.messaging.base.OutboxRepository;
-import com.jacolp.middleware.messaging.config.ReliableMessagingProperties;
-import com.jacolp.middleware.messaging.constant.EventTypes;
-import com.jacolp.middleware.messaging.pulisher.OutboxEventPublisher;
+import com.jacolp.common.messaging.base.EventEnvelope;
+import com.jacolp.common.messaging.base.OutboxRepository;
+import com.jacolp.common.messaging.config.ReliableMessagingProperties;
+import com.jacolp.common.messaging.constant.EventTypes;
+import com.jacolp.common.messaging.pulisher.OutboxEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

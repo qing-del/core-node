@@ -1,6 +1,6 @@
 package com.jacolp.middleware.module.audio.biz.domain.audio;
 
-import com.jacolp.audio.biz.audio.AudioTaskLifecycle;
+import com.jacolp.audio.audio.AudioTaskLifecycle;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

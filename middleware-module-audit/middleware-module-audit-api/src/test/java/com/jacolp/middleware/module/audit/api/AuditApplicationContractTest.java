@@ -1,6 +1,6 @@
 package com.jacolp.middleware.module.audit.api;
 
-import com.jacolp.module.audit.api.*;
+import com.jacolp.audit.api.*;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

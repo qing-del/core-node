@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
-<mapper namespace="com.jacolp.module.audit.biz.infrastructure.persistence.mapper.NoteAuditMapper">
+<mapper namespace="com.jacolp.audit.infrastructure.persistence.mapper.NoteAuditMapper">
 
-    <resultMap id="NoteAuditRecordMap" type="com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.NoteAuditRecordDO">
+    <resultMap id="NoteAuditRecordMap" type="com.jacolp.audit.infrastructure.persistence.dataobject.NoteAuditRecordDO">
         <id column="id" property="id"/>
         <result column="applicant_user_id" property="applicantUserId"/>
         <result column="note_id" property="noteId"/>
@@ -16,7 +16,7 @@
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
-    <resultMap id="NoteAuditVOMap" type="com.jacolp.module.audit.biz.application.vo.NoteAuditVO">
+    <resultMap id="NoteAuditVOMap" type="com.jacolp.audit.application.vo.NoteAuditVO">
         <id column="id" property="id"/>
         <result column="applicant_user_id" property="applicantUserId"/>
         <result column="applicant_username" property="applicantUsername"/>
@@ -95,7 +95,7 @@
         </foreach>
     </update>
 
-    <insert id="insertAuditRecord" parameterType="com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.NoteAuditRecordDO" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertAuditRecord" parameterType="com.jacolp.audit.infrastructure.persistence.dataobject.NoteAuditRecordDO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO biz_note_audit_record (applicant_user_id, note_id, apply_reason, status, create_time)
         VALUES (#{applicantUserId}, #{noteId}, #{applyReason}, 0, NOW())
     </insert>

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CORE NODE 授权确认</title>
+    <style>
+        :root { color: #161618; background: #f7f7f5; font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; }
+        * { box-sizing: border-box; }
+        body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 15% 12%, rgba(99, 102, 241, .13), transparent 28rem), radial-gradient(circle at 86% 88%, rgba(17, 17, 17, .08), transparent 24rem), #f7f7f5; }
+        main { width: min(100%, 520px); padding: 40px; background: rgba(255, 255, 255, .92); border: 1px solid rgba(17, 17, 17, .10); border-radius: 24px; box-shadow: 0 24px 70px rgba(17, 17, 17, .13); }
+        .brand { margin: 0 0 28px; font-size: .78rem; font-weight: 800; letter-spacing: .16em; }
+        h1 { margin: 0; font-size: clamp(1.75rem, 7vw, 2.35rem); letter-spacing: -.06em; }
+        .accent { width: 34px; height: 4px; margin: 16px 0 28px; border-radius: 999px; background: #4f46e5; }
+        .intro { margin: 0 0 24px; color: #5f5f58; line-height: 1.6; }
+        .client { display: inline-flex; padding: 6px 10px; border-radius: 999px; color: #3730a3; background: #eef2ff; font-weight: 800; }
+        h2 { margin: 28px 0 10px; font-size: 1rem; }
+        .hint { margin: 0 0 12px; color: #5f5f58; font-size: .92rem; line-height: 1.55; }
+        ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+        .mandatory { padding: 10px 12px; border: 1px solid #c7d2fe; border-radius: 12px; color: #3730a3; background: #eef2ff; font-weight: 700; }
+        .optional { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 12px; border: 1px solid #d6d6d1; border-radius: 12px; background: #fff; font-weight: 700; }
+        .optional input { width: 18px; height: 18px; accent-color: #4f46e5; }
+        form { display: grid; gap: 14px; margin-top: 30px; }
+        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        button { min-height: 48px; border: 0; border-radius: 12px; color: #fff; background: #4f46e5; font: inherit; font-weight: 800; cursor: pointer; }
+        button:hover { background: #4338ca; }
+        .deny { color: #7f1d1d; background: #fef2f2; border: 1px solid #fecaca; }
+        .deny:hover { background: #fee2e2; }
+        @media (max-width: 480px) { body { padding: 16px; } main { padding: 30px 24px; border-radius: 20px; } .actions { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<main aria-labelledby="consent-title">
+    <p class="brand">CORE NODE</p>
+    <h1 id="consent-title">授权确认</h1>
+    <div class="accent" aria-hidden="true"></div>
+    <p class="intro"><span class="client" th:text="${clientId}">core_agent</span> 请求访问下列权限。</p>
+
+    <section aria-labelledby="mandatory-title">
+        <h2 id="mandatory-title">自动授予</h2>
+        <p class="hint">这些权限由客户端与账号策略共同要求，不能在本次授权中取消。</p>
+        <ul>
+            <li class="mandatory" th:each="scope : ${mandatoryScopes}" th:text="${scope}">note:read</li>
+        </ul>
+    </section>
+
+    <section aria-labelledby="optional-title" th:if="${!optionalScopes.isEmpty()}">
+        <h2 id="optional-title">可选权限</h2>
+        <p class="hint">可按需选择额外授予给 CORE AGENT 的权限。</p>
+    </section>
+    <form method="post" action="/oauth2/authorize" th:action="@{/oauth2/authorize}">
+        <input type="hidden" name="client_id" th:value="${clientId}">
+        <input type="hidden" name="state" th:value="${oauthState}">
+        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <ul th:if="${!optionalScopes.isEmpty()}" aria-labelledby="optional-title">
+            <li th:each="scope : ${optionalScopes}">
+                <label class="optional">
+                    <input type="checkbox" name="scope" th:value="${scope}"
+                           th:checked="${preselectedOptionalScopes.contains(scope)}">
+                    <span th:text="${scope}">note:write</span>
+                </label>
+            </li>
+        </ul>
+        <div class="actions">
+            <button type="submit" name="consent_action" value="approve">确认授权</button>
+            <button class="deny" type="submit" name="consent_action" value="deny">拒绝</button>
+        </div>
+    </form>
+</main>
+</body>
+</html>

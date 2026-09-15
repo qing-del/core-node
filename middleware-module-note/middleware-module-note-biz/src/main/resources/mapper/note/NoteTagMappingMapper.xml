@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
-<mapper namespace="com.jacolp.module.note.biz.infrastructure.persistence.mapper.NoteTagMappingMapper">
+<mapper namespace="com.jacolp.note.infrastructure.persistence.mapper.NoteTagMappingMapper">
 
-    <resultMap id="NoteTagMappingMap" type="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteTagMappingDO">
+    <resultMap id="NoteTagMappingMap" type="com.jacolp.note.infrastructure.persistence.dataobject.NoteTagMappingDO">
         <id column="id" property="id"/>
         <result column="note_id" property="noteId"/>
         <result column="tag_id" property="tagId"/>
@@ -30,7 +30,7 @@
         LIMIT 1
     </select>
 
-    <select id="selectByIdWithValidUserId" resultType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteTagMappingDO">
+    <select id="selectByIdWithValidUserId" resultType="com.jacolp.note.infrastructure.persistence.dataobject.NoteTagMappingDO">
         SELECT t.id, t.note_id, t.tag_id, t.parsed_tag_name, t.status, t.is_deleted, t.create_time, t.update_time
         FROM biz_note_tag_mapping t
         JOIN biz_note n ON t.note_id = n.id
@@ -169,7 +169,7 @@
           AND is_deleted = 0
     </select>
 
-    <select id="selectBacklinksByTagId" resultType="com.jacolp.module.note.biz.infrastructure.persistence.projection.MappingProjections$TagBacklink">
+    <select id="selectBacklinksByTagId" resultType="com.jacolp.note.infrastructure.persistence.projection.MappingProjections$TagBacklink">
         SELECT
             m.note_id          AS sourceNoteId,
             n.title            AS sourceNoteTitle,

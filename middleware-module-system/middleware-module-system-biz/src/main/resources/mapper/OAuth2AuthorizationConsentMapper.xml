@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jacolp.system.infrastructure.persistence.mapper.OAuth2AuthorizationConsentMapper">
+
+    <sql id="consentColumns">
+        registered_client_id, principal_name, authorities
+    </sql>
+
+    <select id="selectByRegisteredClientIdAndPrincipalName"
+            resultType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2AuthorizationConsentDO">
+        SELECT <include refid="consentColumns"/>
+        FROM oauth2_authorization_consent
+        WHERE registered_client_id = #{registeredClientId}
+          AND principal_name = #{principalName}
+    </select>
+
+    <select id="selectByPrincipalName"
+            resultType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2AuthorizationConsentDO">
+        SELECT <include refid="consentColumns"/>
+        FROM oauth2_authorization_consent
+        WHERE principal_name = #{principalName}
+        ORDER BY registered_client_id ASC
+    </select>
+
+    <insert id="insert"
+            parameterType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2AuthorizationConsentDO">
+        INSERT INTO oauth2_authorization_consent (registered_client_id, principal_name, authorities)
+        VALUES (#{registeredClientId}, #{principalName}, #{authorities})
+    </insert>
+
+    <update id="updateAuthorities"
+            parameterType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2AuthorizationConsentDO">
+        UPDATE oauth2_authorization_consent
+        SET authorities = #{authorities}
+        WHERE registered_client_id = #{registeredClientId}
+          AND principal_name = #{principalName}
+    </update>
+
+    <delete id="deleteByRegisteredClientIdAndPrincipalName">
+        DELETE FROM oauth2_authorization_consent
+        WHERE registered_client_id = #{registeredClientId}
+          AND principal_name = #{principalName}
+    </delete>
+</mapper>

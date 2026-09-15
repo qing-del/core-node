@@ -1,8 +1,8 @@
 package com.jacolp.middleware.module.audio.biz.interfaces.web.admin;
 
-import com.jacolp.audio.biz.controller.admin.AudioController;
-import com.jacolp.audio.biz.domain.vo.AudioTaskStatisticsVO;
-import com.jacolp.audio.biz.service.AudioTaskService;
+import com.jacolp.audio.controller.admin.AudioController;
+import com.jacolp.audio.domain.vo.AudioTaskStatisticsVO;
+import com.jacolp.audio.service.AudioTaskService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
-<mapper namespace="com.jacolp.module.audit.biz.infrastructure.persistence.mapper.MetaAuditMapper">
+<mapper namespace="com.jacolp.audit.infrastructure.persistence.mapper.MetaAuditMapper">
 
-    <resultMap id="MetaAuditRecordMap" type="com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.MetaAuditRecordDO">
+    <resultMap id="MetaAuditRecordMap" type="com.jacolp.audit.infrastructure.persistence.dataobject.MetaAuditRecordDO">
         <id column="id" property="id"/>
         <result column="applicant_user_id" property="applicantUserId"/>
         <result column="apply_type" property="applyType"/>
@@ -17,7 +17,7 @@
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
-    <resultMap id="MetaAuditVOMap" type="com.jacolp.module.audit.biz.application.vo.MetaAuditVO">
+    <resultMap id="MetaAuditVOMap" type="com.jacolp.audit.application.vo.MetaAuditVO">
         <id column="id" property="id"/>
         <result column="applicant_user_id" property="applicantUserId"/>
         <result column="applicant_username" property="applicantUsername"/>
@@ -98,7 +98,7 @@
         </foreach>
     </update>
 
-    <insert id="insertAuditRecord" parameterType="com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.MetaAuditRecordDO" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertAuditRecord" parameterType="com.jacolp.audit.infrastructure.persistence.dataobject.MetaAuditRecordDO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO biz_tag_audit_record (applicant_user_id, target_id, apply_reason, status, create_time)
         VALUES (#{applicantUserId}, #{targetId}, #{applyReason}, 1, NOW())
     </insert>

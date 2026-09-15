@@ -1,9 +1,11 @@
 package com.jacolp.middleware.module.system.biz.application.event;
 
-import com.jacolp.middleware.messaging.event.StorageReleasedEvent;
-import com.jacolp.module.system.api.quota.UserQuotaApi;
-import com.jacolp.module.system.biz.application.event.StorageReleasedEventHandler;
+import com.jacolp.common.messaging.event.StorageReleasedEvent;
+import com.jacolp.system.api.quota.UserQuotaApi;
+import com.jacolp.system.application.event.StorageReleasedEventHandler;
+
 import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import static org.mockito.Mockito.mock;

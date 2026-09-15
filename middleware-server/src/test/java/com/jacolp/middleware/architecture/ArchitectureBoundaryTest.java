@@ -111,7 +111,7 @@ class ArchitectureBoundaryTest {
     void auditReviewServicesDoNotCallOtherModulesWriteApis() throws Exception {
         Path auditServices = repositoryRoot().resolve(
                 "middleware-module-audit/middleware-module-audit-biz/src/main/java/"
-                        + "com/jacolp/module/audit/biz/application/service");
+                        + "com/jacolp/audit/application/service");
         Pattern forbiddenWriteApi = Pattern.compile(
                 "^\\s*import\\s+com\\.jacolp\\.module\\.(?:note|media)\\.api\\."
                         + "(?:NoteAuditApplyApi|MediaAuditApplyApi|command\\.(?:ApplyNoteAuditCommand|"

@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.jacolp.module.note.biz.infrastructure.persistence.mapper.NoteContextMapper">
+<mapper namespace="com.jacolp.note.infrastructure.persistence.mapper.NoteContextMapper">
 
-    <select id="selectByNoteId" parameterType="java.lang.Long" resultType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteContextDO">
+    <select id="selectByNoteId" parameterType="java.lang.Long" resultType="com.jacolp.note.infrastructure.persistence.dataobject.NoteContextDO">
         SELECT
             id, note_id, markdown_content, markdown_content_new, create_time, update_time
         FROM biz_note_context
         WHERE note_id = #{noteId}
     </select>
 
-    <insert id="insertContext" parameterType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteContextDO" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertContext" parameterType="com.jacolp.note.infrastructure.persistence.dataobject.NoteContextDO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO biz_note_context
             (note_id, markdown_content, markdown_content_new, create_time, update_time)
         VALUES
             (#{noteId}, #{markdownContent}, NULL, NOW(), NOW())
     </insert>
 
-    <update id="updateContext" parameterType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteContextDO">
+    <update id="updateContext" parameterType="com.jacolp.note.infrastructure.persistence.dataobject.NoteContextDO">
         UPDATE biz_note_context
         SET markdown_content = #{markdownContent},
             markdown_content_new = #{markdownContentNew},
@@ -38,7 +38,7 @@
         </foreach>
     </delete>
 
-    <select id="selectByNoteIdWithValidUserId" resultType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteContextDO">
+    <select id="selectByNoteIdWithValidUserId" resultType="com.jacolp.note.infrastructure.persistence.dataobject.NoteContextDO">
         select
             c.*
         from biz_note_context c

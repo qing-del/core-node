@@ -54,6 +54,16 @@ spring:
             port: 465
             class: javax.net.ssl.SSLSocketFactory
 
+server:
+  servlet:
+    session:
+      timeout: 10m
+      cookie:
+        http-only: true
+        same-site: lax
+        # 生产环境必须通过 TLS 并将该值设为 true；本地 127.0.0.1 HTTP 保持 false。
+        secure: ${OAUTH_SESSION_COOKIE_SECURE:false}
+
 management:
   endpoints:
     web:
@@ -66,6 +76,16 @@ management:
         enabled: true
 
 jacolp:
+  web:
+    cors:
+      # Keep the current behavior by default; narrow this list per deployment profile.
+      allowed-origin-patterns: ${jacolp.web.cors.allowed-origin-patterns}
+      allowed-methods: ${jacolp.web.cors.allowed-methods}
+      allowed-headers: ${jacolp.web.cors.allowed-headers}
+      exposed-headers: ${jacolp.web.cors.exposed-headers}
+      allow-credentials: ${jacolp.web.cors.allow-credentials}
+      allow-private-network: ${jacolp.web.cors.allow-private-network}
+      max-age: ${jacolp.web.cors.max-age}
   messaging:
     enabled: ${MESSAGING_ENABLED:true}
     batch-size: ${MESSAGING_OUTBOX_BATCH_SIZE:100}
@@ -83,13 +103,15 @@ jacolp:
     password: ${jacolp.admin.password}
     email: ${jacolp.admin.email}
   default-password: ${jacolp.default-password}  # 默认测试密码
+  oauth2:
+    browser-login:
+      csrf-enabled: ${jacolp.oauth2.browser-login.csrf-enabled:false}
+    rs256:
+      issuer: ${OAUTH2_RS256_ISSUER:core-node}
+      audience: ${OAUTH2_RS256_AUDIENCE:core-node-api}
+      private-key-location: ${jacolp.oauth2.rs256.private-key-location}
+      public-key-location: ${jacolp.oauth2.rs256.public-key-location}
   jwt:
-    admin-secret-key: ${jwt.admin-secret-key}
-    admin-ttl: 7200000
-    admin-token-name: ${jwt.admin-token-name}
-    user-secret-key: ${jwt.user-secret-key}
-    user-ttl: 7200000
-    user-token-name: ${jwt.user-token-name}
     active-secret-key: ${jacolp.jwt.active-secret-key}
     active-ttl: 900000  # 15 分钟
     active-code-ttl: 300000  # 5 分钟

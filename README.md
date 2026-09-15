@@ -306,8 +306,10 @@ Python 对接以 [2026-08-09 最新对接文档](static/document/python-audio-mo
 - Filter 解析 JWT 后将身份与 authority 写入 `SecurityContext`；`BaseContext` / `PermissionContext` 优先从 holder 读取，并保留 legacy fallback。
 
 ### 10.2 角色层级
-- 层级：CREATOR(1) > ADMIN(2) > USER(3) > LEVEL_1_VIP(4)
-- `@RequireSuperiorRole` 由 `SuperiorRoleAspect` 拦截，规则：操作者的 `roleId` 必须严格小于目标用户的 `roleId`。
+
+- 当前角色：CREATOR、ADMIN、USER。
+- 目标角色等级以 `sys_role.rank` 为准；数值越小等级越高，不依赖角色 ID。
+- 当前 `@RequireSuperiorRole` / `SuperiorRoleAspect` 仍使用 legacy `roleId` 比较；计划在 Phase 5 切换为 `rank` 比较。
 
 ### 10.3 审核工作流
 `isPass` 字段：`0`-待审核、`1`-已通过、`2`-已拒绝。

@@ -1,28 +1,28 @@
 package com.jacolp.middleware.module.audio.biz.application.service;
 
-import com.jacolp.audio.biz.service.AudioTaskServiceImpl;
-import com.jacolp.audio.biz.service.AudioTaskPublisher;
-import com.jacolp.audio.biz.service.AudioResourceDeletePublisher;
-import com.jacolp.audio.biz.service.TransactionAfterCommitExecutor;
-import com.jacolp.audio.biz.audio.AudioTaskLifecycle;
-import com.jacolp.context.BaseContext;
-import com.jacolp.context.PermissionContext;
-import com.jacolp.exception.BaseException;
-import com.jacolp.exception.RateLimitExceededException;
-import com.jacolp.audio.biz.constant.AudioConstant;
-import com.jacolp.audio.biz.domain.dto.AudioCallbackFinishDTO;
-import com.jacolp.audio.biz.domain.dto.AudioCallbackStartDTO;
-import com.jacolp.audio.biz.domain.dto.AudioTaskSubmitDTO;
-import com.jacolp.audio.biz.persistence.dataobject.AudioTaskDO;
-import com.jacolp.audio.biz.persistence.mapper.AudioTaskMapper;
-import com.jacolp.audio.biz.domain.vo.AudioTaskStatisticsVO;
-import com.jacolp.module.system.api.quota.ConsumeQuotaCommand;
-import com.jacolp.module.system.api.quota.ConsumeQuotaResult;
-import com.jacolp.module.system.api.quota.QuotaSnapshot;
-import com.jacolp.module.system.api.quota.QuotaType;
-import com.jacolp.module.system.api.quota.UserQuotaApi;
+import com.jacolp.audio.service.AudioTaskServiceImpl;
+import com.jacolp.audio.service.AudioTaskPublisher;
+import com.jacolp.audio.service.AudioResourceDeletePublisher;
+import com.jacolp.audio.service.TransactionAfterCommitExecutor;
+import com.jacolp.audio.audio.AudioTaskLifecycle;
+import com.jacolp.common.core.exception.BaseException;
+import com.jacolp.common.core.exception.RateLimitExceededException;
+import com.jacolp.module.audio.biz.support.TestSecurityContext;
+import com.jacolp.audio.constant.AudioConstant;
+import com.jacolp.audio.domain.dto.AudioCallbackFinishDTO;
+import com.jacolp.audio.domain.dto.AudioCallbackStartDTO;
+import com.jacolp.audio.domain.dto.AudioTaskSubmitDTO;
+import com.jacolp.audio.persistence.dataobject.AudioTaskDO;
+import com.jacolp.audio.persistence.mapper.AudioTaskMapper;
+import com.jacolp.audio.domain.vo.AudioTaskStatisticsVO;
+import com.jacolp.system.api.quota.ConsumeQuotaCommand;
+import com.jacolp.system.api.quota.ConsumeQuotaResult;
+import com.jacolp.system.api.quota.QuotaSnapshot;
+import com.jacolp.system.api.quota.QuotaType;
+import com.jacolp.system.api.quota.UserQuotaApi;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,13 +64,12 @@ class AudioTaskServiceImplTest {
         ReflectionTestUtils.setField(service, "audioTaskPublisher", publisher);
         ReflectionTestUtils.setField(service, "audioResourceDeletePublisher", deletePublisher);
         ReflectionTestUtils.setField(service, "transactionAfterCommitExecutor", afterCommitExecutor);
-        BaseContext.setCurrentId(9L);
+        TestSecurityContext.authenticate(9L, false);
     }
 
     @AfterEach
     void clearContext() {
-        BaseContext.remove();
-        PermissionContext.remove();
+        TestSecurityContext.clear();
     }
 
     @Test
@@ -84,7 +83,7 @@ class AudioTaskServiceImplTest {
 
         assertThatThrownBy(() -> service.getTask(30L)).isInstanceOf(BaseException.class);
 
-        PermissionContext.setAdmin(true);
+        TestSecurityContext.authenticate(9L, true);
         assertThat(service.getTask(30L).getSourceText()).isEqualTo("detail text");
         assertThat(service.getTask(30L).getResultUrl()).isEqualTo("https://audio.example/30.mp3");
     }
@@ -105,7 +104,7 @@ class AudioTaskServiceImplTest {
         assertThat(service.cancelTask(31L)).isTrue();
         verify(mapper).cancelTask(31L, 9L, AudioTaskLifecycle.Status.CANCELLED.code());
 
-        PermissionContext.setAdmin(true);
+        TestSecurityContext.authenticate(9L, true);
         when(mapper.cancelTask(32L, null, AudioTaskLifecycle.Status.CANCELLED.code())).thenReturn(1);
         assertThat(service.cancelTask(32L)).isTrue();
         verify(mapper).cancelTask(32L, null, AudioTaskLifecycle.Status.CANCELLED.code());
@@ -160,7 +159,7 @@ class AudioTaskServiceImplTest {
         task.setUserId(7L);
         when(mapper.selectById(42L)).thenReturn(task);
         when(mapper.deleteTask(42L, null)).thenReturn(1);
-        PermissionContext.setAdmin(true);
+        TestSecurityContext.authenticate(9L, true);
 
         assertThat(service.deleteTask(42L)).isTrue();
 

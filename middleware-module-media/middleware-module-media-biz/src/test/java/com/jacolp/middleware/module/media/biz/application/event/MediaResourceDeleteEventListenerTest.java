@@ -1,17 +1,18 @@
 package com.jacolp.middleware.module.media.biz.application.event;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jacolp.middleware.messaging.base.EventEnvelope;
-import com.jacolp.middleware.messaging.tools.EventMessageCodec;
-import com.jacolp.middleware.messaging.pulisher.EventRetryPublisher;
-import com.jacolp.middleware.messaging.constant.EventTopology;
-import com.jacolp.middleware.messaging.constant.EventTypes;
-import com.jacolp.middleware.messaging.service.InboxService;
-import com.jacolp.middleware.messaging.event.MediaResourceDeleteRequestedEvent;
-import com.jacolp.module.media.biz.application.event.MediaResourceDeleteEventHandler;
-import com.jacolp.module.media.biz.application.event.MediaResourceDeleteEventListener;
+import com.jacolp.common.messaging.constant.EventTypes;
+import com.jacolp.common.messaging.event.MediaResourceDeleteRequestedEvent;
+import com.jacolp.common.messaging.base.EventEnvelope;
+import com.jacolp.common.messaging.tools.EventMessageCodec;
+import com.jacolp.common.messaging.pulisher.EventRetryPublisher;
+import com.jacolp.common.messaging.constant.EventTopology;
+import com.jacolp.common.messaging.service.InboxService;
+import com.jacolp.media.application.event.MediaResourceDeleteEventHandler;
+import com.jacolp.media.application.event.MediaResourceDeleteEventListener;
 import java.time.Instant;
 import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 

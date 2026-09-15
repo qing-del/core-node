@@ -48,8 +48,8 @@ function handleLogout() {
 onMounted(async () => {
   try {
     await authStore.fetchAdminUserInfo()
-  } catch (error) {
-    console.error('获取管理员信息失败', error)
+  } catch {
+    // request.ts already provides the user-facing, credential-safe feedback.
   } finally {
     isLoading.value = false
   }

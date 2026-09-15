@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
-<mapper namespace="com.jacolp.module.note.biz.infrastructure.persistence.mapper.TagMapper">
+<mapper namespace="com.jacolp.note.infrastructure.persistence.mapper.TagMapper">
 
     <!-- 新增标签，主键回填 -->
-    <insert id="insertTag" parameterType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TagDO" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertTag" parameterType="com.jacolp.note.infrastructure.persistence.dataobject.TagDO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO biz_tag (user_id, tag_name, audit_status, create_time)
         VALUES (#{userId}, #{tagName}, #{auditStatus}, NOW())
     </insert>
@@ -19,7 +19,7 @@
     </insert>
 
     <!-- 修改标签 -->
-    <update id="updateTag" parameterType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TagDO">
+    <update id="updateTag" parameterType="com.jacolp.note.infrastructure.persistence.dataobject.TagDO">
         UPDATE biz_tag
         SET tag_name = #{tagName}
         WHERE id = #{id}
@@ -27,7 +27,7 @@
     </update>
 
     <!-- 删除前校验：统计各 tag 的关联笔记数 -->
-    <select id="selectDeleteChecksByIds" resultType="com.jacolp.module.note.biz.infrastructure.persistence.dto.TagNoteCountDTO">
+    <select id="selectDeleteChecksByIds" resultType="com.jacolp.note.infrastructure.persistence.dto.TagNoteCountDTO">
         SELECT
             t.id AS tagId,
             t.tag_name AS tagName,
@@ -67,7 +67,7 @@
     </update>
 
     <!-- 列表查询（前缀搜索，PageHelper 分页） -->
-    <select id="listByCondition" resultType="com.jacolp.module.note.biz.application.vo.tag.TagVO">
+    <select id="listByCondition" resultType="com.jacolp.note.application.vo.tag.TagVO">
         SELECT id, user_id AS userId, tag_name AS tagName, audit_status AS auditStatus, create_time AS createTime
         FROM biz_tag
         <where>
@@ -82,7 +82,7 @@
         ORDER BY create_time DESC
     </select>
 
-    <select id="selectByIds" resultType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TagDO">
+    <select id="selectByIds" resultType="com.jacolp.note.infrastructure.persistence.dataobject.TagDO">
         SELECT id, user_id AS userId, tag_name AS tagName, audit_status AS auditStatus, create_time AS createTime
         FROM biz_tag
         WHERE audit_status != 4
@@ -92,7 +92,7 @@
         </foreach>
     </select>
 
-    <select id="selectIdsByNamesAndUserId" resultType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TagDO">
+    <select id="selectIdsByNamesAndUserId" resultType="com.jacolp.note.infrastructure.persistence.dataobject.TagDO">
         select
             id,
             user_id AS userId,
@@ -109,7 +109,7 @@
     </select>
 
     <!-- 用户端列表查询：根据 globalScope 控制查询范围 -->
-    <select id="listByUserCondition" resultType="com.jacolp.module.note.biz.application.vo.tag.TagVO">
+    <select id="listByUserCondition" resultType="com.jacolp.note.application.vo.tag.TagVO">
         SELECT id, user_id AS userId, tag_name AS tagName, audit_status AS auditStatus, create_time AS createTime
         FROM biz_tag
         <where>

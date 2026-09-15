@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jacolp.system.infrastructure.persistence.mapper.PermissionMapper">
+
+    <select id="selectByCode"
+            resultType="com.jacolp.system.infrastructure.persistence.dataobject.PermissionDO">
+        SELECT id, code, oauth_scope, resource, action, status, description, create_time, update_time
+        FROM sys_permission
+        WHERE code = #{code}
+    </select>
+
+    <select id="selectActiveByRoleIds"
+            resultType="com.jacolp.system.infrastructure.persistence.dataobject.PermissionDO">
+        SELECT DISTINCT p.id, p.code, p.oauth_scope, p.resource, p.action, p.status, p.description,
+                        p.create_time, p.update_time
+        FROM sys_permission p
+        INNER JOIN sys_role_perm rp ON rp.perm_id = p.id
+        WHERE p.status = 'active'
+          AND rp.role_id IN
+        <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+            #{roleId}
+        </foreach>
+        ORDER BY p.code ASC, p.id ASC
+    </select>
+
+    <insert id="insert"
+            parameterType="com.jacolp.system.infrastructure.persistence.dataobject.PermissionDO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_permission (code, oauth_scope, resource, action, status, description)
+        VALUES (#{code}, #{oauthScope}, #{resource}, #{action}, #{status}, #{description})
+    </insert>
+
+    <update id="updateById"
+            parameterType="com.jacolp.system.infrastructure.persistence.dataobject.PermissionDO">
+        UPDATE sys_permission
+        SET code = #{code},
+            oauth_scope = #{oauthScope},
+            resource = #{resource},
+            action = #{action},
+            status = #{status},
+            description = #{description},
+            update_time = CURRENT_TIMESTAMP(6)
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM sys_permission
+        WHERE id = #{id}
+    </delete>
+</mapper>

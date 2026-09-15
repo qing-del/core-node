@@ -8,17 +8,16 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.jacolp.context.BaseContext;
-import com.jacolp.context.PermissionContext;
-import com.jacolp.enums.AuditStatus;
-import com.jacolp.exception.BaseException;
-import com.jacolp.module.audit.api.AuditApplicationApi;
-import com.jacolp.module.audit.api.AuditTargetType;
-import com.jacolp.module.audit.api.CancelAuditApplicationCommand;
-import com.jacolp.module.audit.api.CreateAuditApplicationCommand;
-import com.jacolp.module.note.biz.application.service.TagServiceImpl;
-import com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TagDO;
-import com.jacolp.module.note.biz.infrastructure.persistence.mapper.TagMapper;
+import com.jacolp.common.core.enums.AuditStatus;
+import com.jacolp.common.core.exception.BaseException;
+import com.jacolp.note.support.TestSecurityContext;
+import com.jacolp.audit.api.AuditApplicationApi;
+import com.jacolp.audit.api.AuditTargetType;
+import com.jacolp.audit.api.CancelAuditApplicationCommand;
+import com.jacolp.audit.api.CreateAuditApplicationCommand;
+import com.jacolp.note.application.service.TagServiceImpl;
+import com.jacolp.note.infrastructure.persistence.dataobject.TagDO;
+import com.jacolp.note.infrastructure.persistence.mapper.TagMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -28,15 +27,14 @@ class TagServiceImplTest {
 
     @AfterEach
     void clearContexts() {
-        BaseContext.remove();
-        PermissionContext.remove();
+        TestSecurityContext.clear();
     }
 
     @Test
     void submitAuditUsesCasThenCreatesSynchronousApplication() {
         TagMapper mapper = mock(TagMapper.class);
         AuditApplicationApi auditApi = mock(AuditApplicationApi.class);
-        BaseContext.setCurrentId(9L);
+        TestSecurityContext.authenticate(9L, false);
         when(mapper.selectByIdAndUserId(7L, 9L)).thenReturn(tag(7L, 9L, AuditStatus.WAIT));
         when(mapper.updateAuditStatusIfCurrent(7L, AuditStatus.WAIT.getCode(),
                 AuditStatus.AUDITING.getCode())).thenReturn(1);
@@ -53,7 +51,7 @@ class TagServiceImplTest {
     void submitAuditDoesNotCreateApplicationWhenCasFails() {
         TagMapper mapper = mock(TagMapper.class);
         AuditApplicationApi auditApi = mock(AuditApplicationApi.class);
-        BaseContext.setCurrentId(9L);
+        TestSecurityContext.authenticate(9L, false);
         when(mapper.selectByIdAndUserId(7L, 9L)).thenReturn(tag(7L, 9L, AuditStatus.WAIT));
         when(mapper.updateAuditStatusIfCurrent(7L, AuditStatus.WAIT.getCode(),
                 AuditStatus.AUDITING.getCode())).thenReturn(0);
@@ -67,7 +65,7 @@ class TagServiceImplTest {
     void cancelAuditCancelsApplicationThenUsesCasToRestoreWaiting() {
         TagMapper mapper = mock(TagMapper.class);
         AuditApplicationApi auditApi = mock(AuditApplicationApi.class);
-        BaseContext.setCurrentId(9L);
+        TestSecurityContext.authenticate(9L, false);
         when(mapper.selectByIdAndUserId(7L, 9L)).thenReturn(tag(7L, 9L, AuditStatus.AUDITING));
         when(mapper.updateAuditStatusIfCurrent(7L, AuditStatus.AUDITING.getCode(),
                 AuditStatus.WAIT.getCode())).thenReturn(1);

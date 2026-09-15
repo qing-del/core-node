@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>CoreNode 登录验证码</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f7f7f5; color:#1f1f1d; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif; -webkit-font-smoothing:antialiased;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent; mso-hide:all;">您的 CoreNode 登录验证码已生成，请在有效期内完成登录。</div>
+
+  <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%; background-color:#f7f7f5;">
+    <tr>
+      <td align="center" style="padding:32px 16px 40px;">
+        <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%; max-width:520px; background-color:#ffffff; border:1px solid #dededb; border-radius:20px; box-shadow:0 8px 24px rgba(15,15,15,0.06);">
+          <tr>
+            <td style="padding:32px 32px 36px;">
+              <!-- Brand header -->
+              <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td align="left" valign="middle">
+                    <table border="0" cellpadding="0" cellspacing="0" role="presentation">
+                      <tr>
+                        <td align="center" valign="middle" style="width:32px; height:32px; border-radius:8px; background-color:#111111; color:#ffffff; font-size:16px; font-weight:700; line-height:32px;">✦</td>
+                        <td style="padding-left:10px;">
+                          <p style="margin:0; color:#1f1f1d; font-size:15px; font-weight:760; letter-spacing:1.2px; line-height:18px;">CORE<span style="font-weight:400;"> NODE</span></p>
+                          <p style="margin:3px 0 0; color:#aaa9a3; font-size:9px; font-weight:700; letter-spacing:2px; line-height:12px;">WORKSPACE</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td align="right" valign="middle" style="color:#777771; font-size:9px; font-weight:700; letter-spacing:1.8px; line-height:14px;">SECURITY<br>CODE</td>
+                </tr>
+              </table>
+
+              <div style="height:1px; margin:28px 0 30px; background-color:#eeeeec; line-height:1px;">&nbsp;</div>
+
+              <p style="margin:0 0 10px; color:#777771; font-size:13px; line-height:20px;" th:text="'你好，' + ${username}">你好</p>
+              <h1 style="margin:0 0 14px; color:#1f1f1d; font-size:28px; font-weight:760; letter-spacing:-0.8px; line-height:36px;">您的登录验证码</h1>
+              <p style="margin:0; color:#4f4f4a; font-size:15px; line-height:26px;">你正在使用邮箱验证码登录 CoreNode，请在有效期内完成验证。</p>
+
+              <!-- Verification code -->
+              <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:28px; background-color:#f3f3f1; border:1px solid #dededb; border-radius:14px;">
+                <tr>
+                  <td align="center" style="padding:24px 16px 22px;">
+                    <p style="margin:0 0 10px; color:#777771; font-size:12px; font-weight:600; line-height:18px;">LOGIN VERIFICATION CODE</p>
+                    <p th:text="${verificationCode}" style="margin:0; color:#111111; font-family:'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size:36px; font-weight:700; letter-spacing:9px; line-height:44px;">000000</p>
+                    <p style="margin:12px 0 0; color:#777771; font-size:12px; line-height:18px;">验证码将在 <span th:text="${expiryMinutes}">10</span> 分钟后失效</p>
+                  </td>
+                </tr>
+              </table>
+
+              <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:24px;">
+                <tr>
+                  <td style="padding:12px 14px; border-left:3px solid #c9c9c5; background-color:#fbfbfa; color:#777771; font-size:12px; line-height:20px;">安全提示：请勿向任何人透露验证码。CoreNode 的工作人员不会通过电话、邮件或聊天向你索要验证码。</td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0; color:#aaa9a3; font-size:12px; line-height:20px;">如果这不是你本人的登录操作，请忽略此邮件，并检查账号安全。</p>
+            </td>
+          </tr>
+        </table>
+
+        <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%; max-width:520px;">
+          <tr>
+            <td align="center" style="padding:20px 16px 0; color:#aaa9a3; font-size:11px; line-height:18px;">CORE NODE workspace&nbsp;&nbsp;·&nbsp;&nbsp;System Core v0.0.1<br>这是一封系统邮件，请勿直接回复。</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

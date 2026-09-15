@@ -1,8 +1,8 @@
 package com.jacolp.framework.markdown.io;
 
+import com.jacolp.framework.markdown.converter.MarkdownPublishService;
 import com.jacolp.framework.markdown.MarkdownAutoConfiguration;
 import com.jacolp.framework.markdown.MarkdownProperty;
-import com.jacolp.framework.markdown.converter.MarkdownPublishService;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

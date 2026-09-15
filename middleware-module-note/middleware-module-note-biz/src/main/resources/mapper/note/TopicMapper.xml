@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
-<mapper namespace="com.jacolp.module.note.biz.infrastructure.persistence.mapper.TopicMapper">
+<mapper namespace="com.jacolp.note.infrastructure.persistence.mapper.TopicMapper">
 
     <!-- 新增主题，主键回填到 TopicEntity.id -->
-    <insert id="insertTopic" parameterType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TopicDO" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertTopic" parameterType="com.jacolp.note.infrastructure.persistence.dataobject.TopicDO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO biz_topic (user_id, topic_name, parent_id, sort_order, create_time, update_time)
         VALUES (#{userId}, #{topicName}, #{parentId}, #{sortOrder}, NOW(), NOW())
     </insert>
 
     <!-- 按需更新：仅更新传入字段 -->
-    <update id="updateTopic" parameterType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TopicDO">
+    <update id="updateTopic" parameterType="com.jacolp.note.infrastructure.persistence.dataobject.TopicDO">
         UPDATE biz_topic
         <set>
             <if test="topicName != null and topicName != ''">
@@ -27,7 +27,7 @@
     </update>
 
     <!-- 主题列表查询：左连接笔记统计，支持关键词过滤 -->
-    <select id="listByCondition" resultType="com.jacolp.module.note.biz.application.vo.topic.TopicListVO">
+    <select id="listByCondition" resultType="com.jacolp.note.application.vo.topic.TopicListVO">
         SELECT
             t.id,
             t.user_id AS userId,
@@ -54,7 +54,7 @@
     </select>
 
     <!-- 删除前校验查询：获取每个主题的未删除笔记数 -->
-    <select id="selectDeleteChecksByIds" resultType="com.jacolp.module.note.biz.infrastructure.persistence.dto.TopicNoteCountDTO">
+    <select id="selectDeleteChecksByIds" resultType="com.jacolp.note.infrastructure.persistence.dto.TopicNoteCountDTO">
         SELECT
             t.topic_name AS topicName,
             COUNT(n.id) AS noteCount,
@@ -78,7 +78,7 @@
     </delete>
 
     <!-- 用户端列表查询：根据 globalScope 控制查询范围 -->
-    <select id="listByUserCondition" resultType="com.jacolp.module.note.biz.application.vo.topic.TopicListVO">
+    <select id="listByUserCondition" resultType="com.jacolp.note.application.vo.topic.TopicListVO">
         SELECT
             t.id,
             t.user_id AS userId,
@@ -111,7 +111,7 @@
         ORDER BY t.sort_order ASC, t.update_time DESC, t.id DESC
     </select>
 
-    <select id="listChildrenByParentId" resultType="com.jacolp.module.note.biz.application.vo.topic.TopicListVO">
+    <select id="listChildrenByParentId" resultType="com.jacolp.note.application.vo.topic.TopicListVO">
         SELECT
             t.id,
             t.user_id AS userId,

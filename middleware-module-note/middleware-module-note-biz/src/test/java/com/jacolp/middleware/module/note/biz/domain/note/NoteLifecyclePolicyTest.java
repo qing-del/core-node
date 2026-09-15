@@ -1,7 +1,7 @@
 package com.jacolp.middleware.module.note.biz.domain.note;
 
-import com.jacolp.enums.NoteStatus;
-import com.jacolp.module.note.biz.domain.note.NoteLifecyclePolicy;
+import com.jacolp.note.enums.NoteStatus;
+import com.jacolp.note.domain.note.NoteLifecyclePolicy;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;

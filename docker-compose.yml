@@ -100,10 +100,10 @@ services:
       jacolp.admin.password: ${JACOLP_ADMIN_PASSWORD}
       jacolp.admin.email: ${JACOLP_ADMIN_EMAIL:-admin@example.com}
       jacolp.default-password: ${JACOLP_DEFAULT_PASSWORD:-123456}
-      jwt.admin-secret-key: ${JWT_ADMIN_SECRET_KEY}
-      jwt.admin-token-name: ${JWT_ADMIN_TOKEN_NAME:-adminToken}
-      jwt.user-secret-key: ${JWT_USER_SECRET_KEY}
-      jwt.user-token-name: ${JWT_USER_TOKEN_NAME:-userToken}
+      jacolp.oauth2.rs256.issuer: ${OAUTH2_RS256_ISSUER:-core-node}
+      jacolp.oauth2.rs256.audience: ${OAUTH2_RS256_AUDIENCE:-core-node-api}
+      jacolp.oauth2.rs256.private-key-location: ${OAUTH2_RS256_PRIVATE_KEY_LOCATION:-file:/run/secrets/oauth2-rs256/private.pem}
+      jacolp.oauth2.rs256.public-key-location: ${OAUTH2_RS256_PUBLIC_KEY_LOCATION:-file:/run/secrets/oauth2-rs256/public.pem}
       jacolp.jwt.active-secret-key: ${JACOLP_JWT_ACTIVE_SECRET_KEY}
       jacolp.jwt.active-token-name: ${JACOLP_JWT_ACTIVE_TOKEN_NAME:-activeToken}
       OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID}
@@ -125,6 +125,7 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     volumes:
       - backend_markdown:/app/data/markdown
+      - ${OAUTH2_RS256_KEY_DIRECTORY:?Set OAUTH2_RS256_KEY_DIRECTORY to the host directory containing private.pem and public.pem}:/run/secrets/oauth2-rs256:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/actuator/health/liveness"]
       interval: 30s

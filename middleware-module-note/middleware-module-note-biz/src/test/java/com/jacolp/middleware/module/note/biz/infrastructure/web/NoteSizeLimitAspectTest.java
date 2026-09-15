@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.jacolp.module.note.biz.infrastructure.web.NoteFileLimit;
-import com.jacolp.module.note.biz.infrastructure.web.NoteSizeLimitAspect;
+import com.jacolp.note.infrastructure.web.NoteFileLimit;
+import com.jacolp.note.infrastructure.web.NoteSizeLimitAspect;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.multipart.MultipartFile;

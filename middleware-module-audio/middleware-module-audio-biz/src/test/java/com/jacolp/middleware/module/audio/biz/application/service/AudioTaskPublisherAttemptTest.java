@@ -8,10 +8,10 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jacolp.audio.biz.constant.AudioConstant;
-import com.jacolp.audio.biz.persistence.dataobject.AudioTaskDO;
-import com.jacolp.audio.biz.service.RabbitMqTaskPublisher;
-import com.jacolp.audio.biz.service.RedisStreamTaskPublisher;
+import com.jacolp.audio.constant.AudioConstant;
+import com.jacolp.audio.persistence.dataobject.AudioTaskDO;
+import com.jacolp.audio.service.RabbitMqTaskPublisher;
+import com.jacolp.audio.service.RedisStreamTaskPublisher;
 import java.math.BigDecimal;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

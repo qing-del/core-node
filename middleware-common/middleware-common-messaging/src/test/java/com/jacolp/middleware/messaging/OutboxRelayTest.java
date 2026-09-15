@@ -2,9 +2,9 @@ package com.jacolp.middleware.messaging;
 
 import java.time.Duration;
 
-import com.jacolp.middleware.messaging.base.OutboxRelay;
-import com.jacolp.middleware.messaging.base.OutboxRepository;
-import com.jacolp.middleware.messaging.config.ReliableMessagingProperties;
+import com.jacolp.common.messaging.base.OutboxRelay;
+import com.jacolp.common.messaging.base.OutboxRepository;
+import com.jacolp.common.messaging.config.ReliableMessagingProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 

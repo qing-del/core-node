@@ -8,22 +8,23 @@ USE `personal_saas`;
 -- ==========================================
 CREATE TABLE `sys_role` (
                             `id` bigint NOT NULL AUTO_INCREMENT COMMENT '角色ID',
-                            `role_name` varchar(50) NOT NULL COMMENT '角色名称(如：普通用户、VIP、管理员)',
-                            `role_code` varchar(50) NOT NULL COMMENT '角色标识(如：USER, VIP, ADMIN)',
+                            `role_name` varchar(50) NOT NULL COMMENT '角色名称(如：普通用户、管理员、创建者)',
+                            `role_code` varchar(50) NOT NULL COMMENT '角色标识(如：USER, ADMIN, CREATOR)',
+                            `rank` int unsigned NOT NULL COMMENT '角色等级；数值越小等级越高',
                             `daily_api_limit` int NOT NULL DEFAULT 5 COMMENT '该角色每日允许调用外部API的最高次数',
                             `max_storage_bytes` bigint NOT NULL DEFAULT 104857600 COMMENT '该角色默认最大存储空间(字节, 默认100MB=104857600)',
                             `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                             `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                             PRIMARY KEY (`id`),
-                            UNIQUE KEY `uk_role_code` (`role_code`)
+                            UNIQUE KEY `uk_role_code` (`role_code`),
+                            UNIQUE KEY `uk_sys_role_rank` (`rank`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统角色与额度配置表';
 
--- 初始化角色数据 (max_storage_bytes: CREATOR=100GB, ADMIN=1GB, USER=100MB, VIP=500MB)
-INSERT INTO `sys_role` (`role_name`, `role_code`, `daily_api_limit`, `max_storage_bytes`) VALUES
-                                                                         ('创建者', 'CREATOR', 999999, 107374182400),
-                                                                         ('管理员', 'ADMIN', 1000, 1073741824),
-                                                                         ('普通用户', 'USER', 15, 104857600),
-                                                                         ('高级VIP', 'VIP', 90, 524288000);
+-- 初始化角色数据 (max_storage_bytes: CREATOR=100GB, ADMIN=1GB, USER=100MB)
+INSERT INTO `sys_role` (`role_name`, `role_code`, `rank`, `daily_api_limit`, `max_storage_bytes`) VALUES
+                                                                         ('创建者', 'CREATOR', 1, 999999, 107374182400),
+                                                                         ('管理员', 'ADMIN', 2, 1000, 1073741824),
+                                                                         ('普通用户', 'USER', 3, 15, 104857600);
 
 
 -- ==========================================
@@ -37,6 +38,7 @@ CREATE TABLE `sys_user` (
                             `nickname` varchar(50) DEFAULT NULL COMMENT '昵称',
                             `email` varchar(100) UNIQUE DEFAULT NULL COMMENT '邮箱地址(唯一)',
                             `role_id` bigint NOT NULL DEFAULT 3 COMMENT '关联的角色ID',
+                            `extra_grant_types` varchar(255) NOT NULL DEFAULT '' COMMENT '仅保存账号显式附加授权方式（CSV）；默认授权方式来自配置；不得包含 refresh_token',
                             `max_storage_bytes` bigint DEFAULT NULL COMMENT '用户个性化最大存储空间(字节, NULL=使用角色默认值, 管理员可单独设置)',
                             `used_storage_bytes` bigint NOT NULL DEFAULT 0 COMMENT '用户当前已用存储空间(字节, 笔记与图片合计)',
                             `status` tinyint NOT NULL DEFAULT 2 COMMENT '状态(2:未激活, 1:正常, 0:禁用)',
@@ -50,6 +52,149 @@ CREATE TABLE `sys_user` (
                             KEY `idx_status_role` (`status`, `role_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户信息表';
 -- 服务器启动时会默认创建（若存在则会进行覆盖该用户）一个id=1的创建者用户
+
+-- ==========================================
+-- 2.1 授权元数据表 (RBAC / OAuth2)
+-- ==========================================
+CREATE TABLE `sys_role_perm` (
+    `role_id` bigint NOT NULL COMMENT '角色ID',
+    `perm_id` bigint NOT NULL COMMENT '权限ID',
+    `grant_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '授予时间',
+    PRIMARY KEY (`role_id`, `perm_id`),
+    KEY `idx_sys_role_perm_perm_id` (`perm_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色权限关联表';
+
+CREATE TABLE `oauth2_registered_client` (
+    `id` varchar(100) NOT NULL,
+    `client_id` varchar(100) NOT NULL,
+    `client_id_issued_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `client_secret` varchar(200) DEFAULT NULL,
+    `client_secret_expires_at` timestamp NULL DEFAULT NULL,
+    `client_name` varchar(200) NOT NULL,
+    `client_authentication_methods` varchar(1000) NOT NULL,
+    `authorization_grant_types` varchar(1000) NOT NULL,
+    `redirect_uris` varchar(1000) DEFAULT NULL,
+    `post_logout_redirect_uris` varchar(1000) DEFAULT NULL,
+    `scopes` varchar(1000) NOT NULL,
+    `client_settings` varchar(2000) NOT NULL,
+    `token_settings` varchar(2000) NOT NULL,
+    `auto_approve` varchar(1000) NOT NULL COMMENT '默认同意的权限，逗号分隔',
+    `status` varchar(16) NOT NULL COMMENT 'active 或 disabled',
+    `allowed_ips` varchar(1000) NOT NULL COMMENT '允许来源 CIDR，逗号分隔',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_oauth2_registered_client_client_id` (`client_id`),
+    KEY `idx_oauth2_registered_client_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='OAuth2 注册客户端';
+
+CREATE TABLE `oauth2_authorization_consent` (
+    `registered_client_id` varchar(100) NOT NULL,
+    `principal_name` varchar(200) NOT NULL COMMENT 'sys_user.id 的十进制字符串',
+    `authorities` varchar(1000) NOT NULL,
+    PRIMARY KEY (`registered_client_id`, `principal_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='OAuth2 用户授权同意';
+
+CREATE TABLE `sys_permission` (
+    `id` bigint NOT NULL AUTO_INCREMENT,
+    `code` varchar(100) NOT NULL COMMENT '唯一权限标识，例如 note:read 或 *:read',
+    `oauth_scope` varchar(100) DEFAULT NULL COMMENT '兼容映射字段，不参与核心权限判定',
+    `resource` varchar(50) NOT NULL COMMENT '权限资源，例如 note 或 *',
+    `action` varchar(32) NOT NULL COMMENT '权限动作，例如 read 或 *',
+    `status` varchar(16) NOT NULL COMMENT 'active 或 disabled',
+    `description` varchar(255) DEFAULT NULL,
+    `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_sys_permission_code` (`code`),
+    KEY `idx_sys_permission_resource_action_status` (`resource`, `action`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统权限目录';
+
+-- SAS 7.0.4 JsonMapper-compatible settings. The fixed first-release catalogue is
+-- user, admin, and core_agent only. user/admin are server-side internal clients
+-- with no shared secret and active login grants; core_agent is the active public
+-- PKCE client. Runtime exposure is mandatory under the RS256-only authorization chain.
+INSERT INTO `oauth2_registered_client` (
+    `id`, `client_id`, `client_name`, `client_authentication_methods`,
+    `authorization_grant_types`, `redirect_uris`, `post_logout_redirect_uris`,
+    `scopes`, `client_settings`, `token_settings`, `auto_approve`, `status`, `allowed_ips`
+) VALUES
+(
+    'e7cf5b30-8e43-4db2-bc53-000000000001',
+    'user',
+    'CORE NODE User Client',
+    'internal',
+    'password,email-code,refresh_token',
+    NULL,
+    NULL,
+    'account:read,account:write,audio:read,audio:write,audit:read,audit:write,media:read,media:write,note:read,note:write',
+    '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":false,"settings.client.require-authorization-consent":false}',
+    '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration","PT3H"],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration","PT72H"],"settings.token.authorization-code-time-to-live":["java.time.Duration","PT5M"],"settings.token.device-code-time-to-live":["java.time.Duration","PT5M"]}',
+    'account:read,account:write,audio:read,audio:write,audit:read,audit:write,media:read,media:write,note:read,note:write',
+    'active',
+    '0.0.0.0/0,::/0'
+),
+(
+    'e7cf5b30-8e43-4db2-bc53-000000000002',
+    'admin',
+    'CORE NODE Admin Client',
+    'internal',
+    'password,email-code,refresh_token',
+    NULL,
+    NULL,
+    'account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,media:read,media:manage,note:read,note:manage',
+    '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":false,"settings.client.require-authorization-consent":false}',
+    '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration","PT3H"],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration","PT72H"],"settings.token.authorization-code-time-to-live":["java.time.Duration","PT5M"],"settings.token.device-code-time-to-live":["java.time.Duration","PT5M"]}',
+    'account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,media:read,media:manage,note:read,note:manage',
+    'active',
+    '0.0.0.0/0,::/0'
+),
+(
+    'e7cf5b30-8e43-4db2-bc53-000000000003',
+    'core_agent',
+    'CORE AGENT',
+    'none',
+    'authorization_code,refresh_token',
+    'http://127.0.0.1:9090/oauth/callback',
+    NULL,
+    'note:read,note:write,sys:read,media:read',
+    '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":true,"settings.client.require-authorization-consent":true}',
+    '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration","PT1H"],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration","PT24H"],"settings.token.authorization-code-time-to-live":["java.time.Duration","PT10M"],"settings.token.device-code-time-to-live":["java.time.Duration","PT5M"]}',
+    'note:read,sys:read',
+    'active',
+    '0.0.0.0/0'
+);
+
+-- Keep wildcard permissions as data and preserve them in JWT scope claims. A
+-- later unified authorization utility performs the resource/action matching.
+INSERT INTO `sys_permission` (`code`, `oauth_scope`, `resource`, `action`, `status`, `description`) VALUES
+    ('*:read', NULL, '*', 'read', 'active', '读取权限通配符'),
+    ('*:write', NULL, '*', 'write', 'active', '写入权限通配符'),
+    ('*:manage', NULL, '*', 'manage', 'active', '管理权限通配符'),
+    ('*:super', NULL, '*', 'super', 'active', '创建者专属权限通配符'),
+    ('account:read', NULL, 'account', 'read', 'active', 'Read account data'),
+    ('account:write', NULL, 'account', 'write', 'active', 'Write own account data'),
+    ('account:manage', NULL, 'account', 'manage', 'active', 'Manage accounts'),
+    ('note:read', NULL, 'note', 'read', 'active', 'Read notes and note metadata'),
+    ('note:write', NULL, 'note', 'write', 'active', 'Write own notes and note metadata'),
+    ('note:manage', NULL, 'note', 'manage', 'active', 'Manage notes and note metadata'),
+    ('media:read', NULL, 'media', 'read', 'active', 'Read media and media metadata'),
+    ('media:write', NULL, 'media', 'write', 'active', 'Write own media and media metadata'),
+    ('media:manage', NULL, 'media', 'manage', 'active', 'Manage media and media metadata'),
+    ('audio:read', NULL, 'audio', 'read', 'active', 'Read audio tasks'),
+    ('audio:write', NULL, 'audio', 'write', 'active', 'Create and modify own audio tasks'),
+    ('audio:manage', NULL, 'audio', 'manage', 'active', 'Manage audio tasks'),
+    ('audit:read', NULL, 'audit', 'read', 'active', 'Read audit records'),
+    ('audit:write', NULL, 'audit', 'write', 'active', 'Submit or cancel own audit applications'),
+    ('audit:manage', NULL, 'audit', 'manage', 'active', 'Review audit applications');
+
+-- Direct grants are intentionally minimal. Effective permissions inherit lower
+-- role behavior through sys_role.rank in the later authorization resolver.
+INSERT INTO `sys_role_perm` (`role_id`, `perm_id`)
+SELECT r.`id`, p.`id`
+FROM `sys_role` r
+JOIN `sys_permission` p
+  ON (r.`role_code` = 'USER' AND p.`code` IN ('*:read', '*:write'))
+  OR (r.`role_code` = 'ADMIN' AND p.`code` = '*:manage')
+  OR (r.`role_code` = 'CREATOR' AND p.`code` = '*:super');
 
 
 -- ==========================================

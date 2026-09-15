@@ -2,9 +2,9 @@ package com.jacolp.middleware.module.audio.biz.application.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jacolp.audio.biz.persistence.dataobject.AudioTaskDO;
-import com.jacolp.audio.biz.service.RabbitMqAudioResourceDeletePublisher;
-import com.jacolp.audio.biz.service.RedisStreamAudioResourceDeletePublisher;
+import com.jacolp.audio.persistence.dataobject.AudioTaskDO;
+import com.jacolp.audio.service.RabbitMqAudioResourceDeletePublisher;
+import com.jacolp.audio.service.RedisStreamAudioResourceDeletePublisher;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

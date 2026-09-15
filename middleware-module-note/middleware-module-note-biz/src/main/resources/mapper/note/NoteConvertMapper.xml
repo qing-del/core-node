@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
-<mapper namespace="com.jacolp.module.note.biz.infrastructure.persistence.mapper.NoteConvertMapper">
+<mapper namespace="com.jacolp.note.infrastructure.persistence.mapper.NoteConvertMapper">
 
-    <resultMap id="NoteConvertedMap" type="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteConvertedDO">
+    <resultMap id="NoteConvertedMap" type="com.jacolp.note.infrastructure.persistence.dataobject.NoteConvertedDO">
         <id column="id" property="id"/>
         <result column="note_id" property="noteId"/>
         <result column="title" property="title"/>
@@ -26,7 +26,7 @@
         WHERE note_id = #{noteId}
     </select>
 
-    <insert id="upsertConverted" parameterType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteConvertedDO">
+    <insert id="upsertConverted" parameterType="com.jacolp.note.infrastructure.persistence.dataobject.NoteConvertedDO">
         INSERT INTO biz_note_converted (note_id, title, tags_json, create_time_str, toc_html, body_html, convert_time)
         VALUES (#{noteId}, #{title}, #{tagsJson}, #{createTimeStr}, #{tocHtml}, #{bodyHtml}, NOW())
         ON DUPLICATE KEY UPDATE
@@ -49,7 +49,7 @@
         </foreach>
     </delete>
 
-    <select id="selectByNoteIdWithValidUserId" resultType="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteConvertedDO">
+    <select id="selectByNoteIdWithValidUserId" resultType="com.jacolp.note.infrastructure.persistence.dataobject.NoteConvertedDO">
         select
             c.*
         from biz_note_converted c

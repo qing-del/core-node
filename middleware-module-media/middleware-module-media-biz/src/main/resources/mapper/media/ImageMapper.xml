@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
-<mapper namespace="com.jacolp.module.media.biz.infrastructure.persistence.mapper.ImageMapper">
+<mapper namespace="com.jacolp.media.infrastructure.persistence.mapper.ImageMapper">
 
-    <resultMap id="ImageVO" type="com.jacolp.module.media.biz.application.vo.image.ImageVO">
+    <resultMap id="ImageVO" type="com.jacolp.media.application.vo.image.ImageVO">
         <id column="id" property="id"/>
         <result column="user_id" property="userId"/>
         <result column="topic_id" property="topicId"/>
@@ -16,12 +16,12 @@
         <result column="upload_time" property="uploadTime"/>
     </resultMap>
 
-    <insert id="insertImage" parameterType="com.jacolp.module.media.biz.infrastructure.persistence.dataobject.ImageDO" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertImage" parameterType="com.jacolp.media.infrastructure.persistence.dataobject.ImageDO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO biz_image (user_id, topic_id, filename, oss_url, storage_type, file_size, is_public, audit_status, upload_time)
         VALUES (#{userId}, #{topicId}, #{filename}, #{ossUrl}, #{storageType}, #{fileSize}, 0, 0, NOW())
     </insert>
 
-    <update id="updateImage" parameterType="com.jacolp.module.media.biz.infrastructure.persistence.dataobject.ImageDO">
+    <update id="updateImage" parameterType="com.jacolp.media.infrastructure.persistence.dataobject.ImageDO">
         UPDATE biz_image
         <set>
             <if test="filename != null and filename != ''">filename = #{filename},</if>
@@ -35,7 +35,7 @@
         WHERE id = #{id}
     </update>
 
-    <select id="listByCondition" parameterType="com.jacolp.module.media.biz.infrastructure.persistence.dataobject.ImageDO" resultMap="ImageVO">
+    <select id="listByCondition" parameterType="com.jacolp.media.infrastructure.persistence.dataobject.ImageDO" resultMap="ImageVO">
         SELECT id, user_id, topic_id, filename, oss_url, storage_type, file_size, is_public, audit_status, upload_time
         FROM biz_image
         <where>
@@ -50,7 +50,7 @@
         ORDER BY upload_time DESC
     </select>
 
-    <select id="selectByIds" resultType="com.jacolp.module.media.biz.infrastructure.persistence.dataobject.ImageDO">
+    <select id="selectByIds" resultType="com.jacolp.media.infrastructure.persistence.dataobject.ImageDO">
         SELECT id, user_id AS userId, topic_id AS topicId, filename, oss_url AS ossUrl, storage_type AS storageType, file_size AS fileSize, is_public AS isPublic, audit_status AS auditStatus, upload_time AS uploadTime
         FROM biz_image
         WHERE audit_status != 4
@@ -71,7 +71,7 @@
         <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
     </update>
 
-    <select id="selectByUserIdAndTopicIdAndFilenames" resultType="com.jacolp.module.media.biz.infrastructure.persistence.dataobject.ImageDO">
+    <select id="selectByUserIdAndTopicIdAndFilenames" resultType="com.jacolp.media.infrastructure.persistence.dataobject.ImageDO">
         SELECT id, user_id AS userId, topic_id AS topicId, filename, oss_url AS ossUrl, storage_type AS storageType, file_size AS fileSize, is_public AS isPublic, audit_status AS auditStatus, upload_time AS uploadTime
         FROM biz_image
         WHERE user_id = #{userId}

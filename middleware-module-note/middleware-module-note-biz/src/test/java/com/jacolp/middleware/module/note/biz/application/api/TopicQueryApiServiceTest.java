@@ -1,8 +1,8 @@
 package com.jacolp.middleware.module.note.biz.application.api;
 
-import com.jacolp.module.note.biz.application.api.TopicQueryApiService;
-import com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TopicDO;
-import com.jacolp.module.note.biz.infrastructure.persistence.mapper.TopicMapper;
+import com.jacolp.note.application.api.TopicQueryApiService;
+import com.jacolp.note.infrastructure.persistence.dataobject.TopicDO;
+import com.jacolp.note.infrastructure.persistence.mapper.TopicMapper;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;

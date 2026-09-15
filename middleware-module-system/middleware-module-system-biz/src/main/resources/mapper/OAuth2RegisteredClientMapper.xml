@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jacolp.system.infrastructure.persistence.mapper.OAuth2RegisteredClientMapper">
+
+    <sql id="registeredClientColumns">
+        id, client_id, client_id_issued_at, client_secret, client_secret_expires_at, client_name,
+        client_authentication_methods, authorization_grant_types, redirect_uris, post_logout_redirect_uris,
+        scopes, client_settings, token_settings, auto_approve, status, allowed_ips
+    </sql>
+
+    <select id="selectById"
+            resultType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2RegisteredClientDO">
+        SELECT <include refid="registeredClientColumns"/>
+        FROM oauth2_registered_client
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByClientId"
+            resultType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2RegisteredClientDO">
+        SELECT <include refid="registeredClientColumns"/>
+        FROM oauth2_registered_client
+        WHERE client_id = #{clientId}
+    </select>
+
+    <select id="selectByStatus"
+            resultType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2RegisteredClientDO">
+        SELECT <include refid="registeredClientColumns"/>
+        FROM oauth2_registered_client
+        WHERE status = #{status}
+        ORDER BY client_id ASC, id ASC
+    </select>
+
+    <insert id="insert"
+            parameterType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2RegisteredClientDO">
+        INSERT INTO oauth2_registered_client (
+            id, client_id, client_id_issued_at, client_secret, client_secret_expires_at, client_name,
+            client_authentication_methods, authorization_grant_types, redirect_uris, post_logout_redirect_uris,
+            scopes, client_settings, token_settings, auto_approve, status, allowed_ips
+        ) VALUES (
+            #{id}, #{clientId}, COALESCE(#{clientIdIssuedAt}, CURRENT_TIMESTAMP), #{clientSecret},
+            #{clientSecretExpiresAt}, #{clientName}, #{clientAuthenticationMethods}, #{authorizationGrantTypes},
+            #{redirectUris}, #{postLogoutRedirectUris}, #{scopes}, #{clientSettings}, #{tokenSettings},
+            #{autoApprove}, #{status}, #{allowedIps}
+        )
+    </insert>
+
+    <update id="updateById"
+            parameterType="com.jacolp.system.infrastructure.persistence.dataobject.OAuth2RegisteredClientDO">
+        UPDATE oauth2_registered_client
+        SET client_id = #{clientId},
+            client_id_issued_at = COALESCE(#{clientIdIssuedAt}, client_id_issued_at),
+            client_secret = #{clientSecret},
+            client_secret_expires_at = #{clientSecretExpiresAt},
+            client_name = #{clientName},
+            client_authentication_methods = #{clientAuthenticationMethods},
+            authorization_grant_types = #{authorizationGrantTypes},
+            redirect_uris = #{redirectUris},
+            post_logout_redirect_uris = #{postLogoutRedirectUris},
+            scopes = #{scopes},
+            client_settings = #{clientSettings},
+            token_settings = #{tokenSettings},
+            auto_approve = #{autoApprove},
+            status = #{status},
+            allowed_ips = #{allowedIps}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM oauth2_registered_client
+        WHERE id = #{id}
+    </delete>
+</mapper>

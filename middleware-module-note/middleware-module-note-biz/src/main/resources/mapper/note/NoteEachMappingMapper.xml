@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
-<mapper namespace="com.jacolp.module.note.biz.infrastructure.persistence.mapper.NoteEachMappingMapper">
+<mapper namespace="com.jacolp.note.infrastructure.persistence.mapper.NoteEachMappingMapper">
 
-    <resultMap id="NoteEachMappingMap" type="com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteEachMappingDO">
+    <resultMap id="NoteEachMappingMap" type="com.jacolp.note.infrastructure.persistence.dataobject.NoteEachMappingDO">
         <id column="id" property="id"/>
         <result column="source_note_id" property="sourceNoteId"/>
         <result column="target_note_id" property="targetNoteId"/>
@@ -156,7 +156,7 @@
           AND is_deleted = 0
     </select>
 
-    <select id="selectBacklinksByTargetNoteId" resultType="com.jacolp.module.note.biz.infrastructure.persistence.projection.MappingProjections$NoteBacklink">
+    <select id="selectBacklinksByTargetNoteId" resultType="com.jacolp.note.infrastructure.persistence.projection.MappingProjections$NoteBacklink">
         SELECT
             m.source_note_id   AS sourceNoteId,
             n.title            AS sourceNoteTitle,
@@ -184,7 +184,7 @@
         ORDER BY m.create_time DESC
     </select>
 
-    <select id="selectPublicEachNotesBySourceNoteId" resultType="com.jacolp.module.note.biz.infrastructure.persistence.projection.MappingProjections$NoteEachSimple">
+    <select id="selectPublicEachNotesBySourceNoteId" resultType="com.jacolp.note.infrastructure.persistence.projection.MappingProjections$NoteEachSimple">
         SELECT
             m.target_note_id   AS targetNoteId,
             target.title       AS targetNoteTitle,

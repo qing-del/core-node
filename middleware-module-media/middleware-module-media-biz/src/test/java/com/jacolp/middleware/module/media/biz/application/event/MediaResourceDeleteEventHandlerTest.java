@@ -2,10 +2,11 @@ package com.jacolp.middleware.module.media.biz.application.event;
 
 import com.jacolp.constant.ImageConstant;
 import com.jacolp.framework.oss.AliyunOSSOperator;
-import com.jacolp.middleware.messaging.event.MediaResourceDeleteRequestedEvent;
-import com.jacolp.module.media.biz.application.event.MediaResourceDeleteEventHandler;
-import com.jacolp.module.media.biz.infrastructure.persistence.mapper.ImageDeleteDeadLetterMapper;
+import com.jacolp.common.messaging.event.MediaResourceDeleteRequestedEvent;
+import com.jacolp.media.application.event.MediaResourceDeleteEventHandler;
+import com.jacolp.media.infrastructure.persistence.mapper.ImageDeleteDeadLetterMapper;
 import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

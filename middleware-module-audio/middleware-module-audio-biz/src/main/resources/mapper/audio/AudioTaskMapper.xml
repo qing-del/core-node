@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jacolp.audio.biz.persistence.mapper.AudioTaskMapper">
+<mapper namespace="com.jacolp.audio.persistence.mapper.AudioTaskMapper">
     <insert id="insert" useGeneratedKeys="true"
             keyProperty="id">
         INSERT INTO audio_tasks (user_id, source_text, speed, noise_type, noise_factor, status)
         VALUES (#{userId}, #{sourceText}, #{speed}, #{noiseType}, #{noiseFactor},#{status})
     </insert>
 
-    <select id="selectById" resultType="com.jacolp.audio.biz.persistence.dataobject.AudioTaskDO">
+    <select id="selectById" resultType="com.jacolp.audio.persistence.dataobject.AudioTaskDO">
     SELECT *
     FROM audio_tasks
     WHERE id = #{id}
     </select>
 
-    <select id="selectByUserId" resultType="com.jacolp.audio.biz.persistence.dataobject.AudioTaskDO">
+    <select id="selectByUserId" resultType="com.jacolp.audio.persistence.dataobject.AudioTaskDO">
         SELECT * FROM
         audio_tasks
         <where>
@@ -23,7 +23,7 @@
         ORDER BY create_time DESC
     </select>
 
-    <select id="selectStatistics" resultType="com.jacolp.audio.biz.domain.vo.AudioTaskStatisticsVO">
+    <select id="selectStatistics" resultType="com.jacolp.audio.domain.vo.AudioTaskStatisticsVO">
         SELECT
             COUNT(CASE WHEN status = 2
                 AND update_time &gt;= CURRENT_DATE
@@ -72,7 +72,7 @@
       AND status = #{failedStatus}
     </update>
 
-    <select id="selectPendingTimeout" resultType="com.jacolp.audio.biz.persistence.dataobject.AudioTaskDO">
+    <select id="selectPendingTimeout" resultType="com.jacolp.audio.persistence.dataobject.AudioTaskDO">
     SELECT *
     FROM audio_tasks
     WHERE status IN (0, 1)

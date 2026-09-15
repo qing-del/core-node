@@ -1,9 +1,9 @@
 package com.jacolp.middleware.module.media.biz.application.api;
 
-import com.jacolp.module.media.api.command.ApplyMediaAuditCommand;
-import com.jacolp.module.media.api.model.MediaAuditDecision;
-import com.jacolp.module.media.biz.application.api.MediaAuditApplyApiService;
-import com.jacolp.module.media.biz.infrastructure.persistence.mapper.ImageMapper;
+import com.jacolp.media.api.command.ApplyMediaAuditCommand;
+import com.jacolp.media.api.model.MediaAuditDecision;
+import com.jacolp.media.application.api.MediaAuditApplyApiService;
+import com.jacolp.media.infrastructure.persistence.mapper.ImageMapper;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;

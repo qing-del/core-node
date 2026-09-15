@@ -4,9 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.jacolp.framework.oss.AliyunOSSClient;
-import com.jacolp.module.media.biz.infrastructure.task.AliyunOSSClientKeepLiveTask;
+import com.jacolp.media.infrastructure.task.AliyunOSSClientKeepLiveTask;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;

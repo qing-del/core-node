@@ -2,9 +2,9 @@ package com.jacolp.middleware.module.note.biz.application.dto.note;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.jacolp.module.note.biz.application.dto.note.NoteQueryDTO;
-import com.jacolp.module.note.biz.application.dto.note.UserNoteQueryDTO;
-import com.jacolp.module.note.biz.application.dto.note.UserNoteSearchDTO;
+import com.jacolp.note.application.dto.note.NoteQueryDTO;
+import com.jacolp.note.application.dto.note.UserNoteQueryDTO;
+import com.jacolp.note.application.dto.note.UserNoteSearchDTO;
 import org.junit.jupiter.api.Test;
 
 class NoteCoreDtoContractTest {

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jacolp.system.infrastructure.persistence.mapper.RolePermissionMapper">
+
+    <select id="selectByRoleIds"
+            resultType="com.jacolp.system.infrastructure.persistence.dataobject.RolePermissionDO">
+        SELECT role_id, perm_id, grant_time
+        FROM sys_role_perm
+        WHERE role_id IN
+        <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+            #{roleId}
+        </foreach>
+        ORDER BY role_id ASC, perm_id ASC
+    </select>
+
+    <insert id="insert"
+            parameterType="com.jacolp.system.infrastructure.persistence.dataobject.RolePermissionDO">
+        INSERT INTO sys_role_perm (role_id, perm_id)
+        VALUES (#{roleId}, #{permId})
+    </insert>
+
+    <delete id="deleteByRoleIdAndPermId">
+        DELETE FROM sys_role_perm
+        WHERE role_id = #{roleId}
+          AND perm_id = #{permId}
+    </delete>
+</mapper>

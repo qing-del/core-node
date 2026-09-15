@@ -1,6 +1,6 @@
 package com.jacolp.middleware.module.media.api;
 
-import com.jacolp.module.media.api.command.MediaFileLookupCommand;
+import com.jacolp.media.api.command.MediaFileLookupCommand;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

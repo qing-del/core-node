@@ -1,15 +1,16 @@
 package com.jacolp.middleware.module.note.biz.application.event;
 
-import com.jacolp.middleware.messaging.event.AuditReviewedEvent;
-import com.jacolp.middleware.messaging.base.EventSequenceGuard;
-import com.jacolp.module.note.biz.application.event.NoteAuditReviewedEventHandler;
-import com.jacolp.module.note.biz.infrastructure.persistence.mapper.NoteEachMappingMapper;
-import com.jacolp.module.note.biz.infrastructure.persistence.mapper.NoteImageMappingMapper;
-import com.jacolp.module.note.biz.infrastructure.persistence.mapper.NoteMapper;
-import com.jacolp.module.note.biz.infrastructure.persistence.mapper.NoteTagMappingMapper;
-import com.jacolp.module.note.biz.infrastructure.persistence.mapper.TagMapper;
+import com.jacolp.common.messaging.base.EventSequenceGuard;
+import com.jacolp.common.messaging.event.AuditReviewedEvent;
+import com.jacolp.note.application.event.NoteAuditReviewedEventHandler;
+import com.jacolp.note.infrastructure.persistence.mapper.NoteEachMappingMapper;
+import com.jacolp.note.infrastructure.persistence.mapper.NoteImageMappingMapper;
+import com.jacolp.note.infrastructure.persistence.mapper.NoteMapper;
+import com.jacolp.note.infrastructure.persistence.mapper.NoteTagMappingMapper;
+import com.jacolp.note.infrastructure.persistence.mapper.TagMapper;
 import java.time.Instant;
 import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

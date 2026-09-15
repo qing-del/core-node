@@ -1,7 +1,7 @@
 package com.jacolp.middleware.module.note.api;
 
-import com.jacolp.module.note.api.command.ApplyNoteAuditCommand;
-import com.jacolp.module.note.api.model.AuditDecision;
+import com.jacolp.note.api.command.ApplyNoteAuditCommand;
+import com.jacolp.note.api.model.AuditDecision;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

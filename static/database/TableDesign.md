@@ -57,8 +57,9 @@ flowchart TD
 | 字段名            | 数据类型    | 说明                 | 备注                                           |
 | ----------------- | ----------- | -------------------- | ---------------------------------------------- |
 | id                | bigint      | 主键                 | 自增                                           |
-| role_name         | varchar(50) | 角色名称             | 如：普通用户、VIP、管理员                      |
-| role_code         | varchar(50) | 角色标识             | 唯一键 (`uk_role_code`)，如：USER, VIP         |
+| role_name         | varchar(50) | 角色名称             | 如：创建者、管理员、普通用户                    |
+| role_code         | varchar(50) | 角色标识             | 唯一键 (`uk_role_code`)，如：CREATOR、ADMIN、USER |
+| rank              | int unsigned | 角色等级            | 唯一；数值越小等级越高，不依赖角色 ID           |
 | daily_api_limit   | int         | 每日外部API调用上限  | 默认 5                                         |
 | max_storage_bytes | bigint      | 默认最大存储空间     | 单位：字节，默认 104857600 (100MB)             |
 | create_time       | datetime    | 创建时间             | 默认 CURRENT_TIMESTAMP                         |
@@ -70,6 +71,7 @@ flowchart TD
 |--------|------|------|------|
 | PRIMARY | 主键 | id | 自增主键 |
 | uk_role_code | 唯一索引 | role_code | 角色标识唯一 |
+| uk_sys_role_rank | 唯一索引 | rank | 角色等级唯一 |
 
 ### 2. sys_user (用户信息表)
 

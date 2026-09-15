@@ -70,3 +70,8 @@ AGENTS.md
 /frontend/.env.production
 /.agents/
 /middleware-server/src/main/resources/application-home.yaml
+
+### RSA key material ###
+/resource/key/
+**/src/main/resources/key/
+/middleware-module-system/middleware-module-system-biz/src/main/resources/oauth2-rs256/

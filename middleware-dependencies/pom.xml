@@ -31,6 +31,7 @@
         <jaxb-api.version>2.3.1</jaxb-api.version>
         <activation.version>1.1.1</activation.version>
         <jaxb-runtime.version>2.3.3</jaxb-runtime.version>
+        <nimbus-jose-jwt.version>10.4</nimbus-jose-jwt.version>
     </properties>
 
     <dependencyManagement>
@@ -47,6 +48,11 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-aop</artifactId>
                 <version>${spring-aop-starter.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nimbusds</groupId>
+                <artifactId>nimbus-jose-jwt</artifactId>
+                <version>${nimbus-jose-jwt.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.mybatis.spring.boot</groupId>
@@ -225,6 +231,11 @@
             <dependency>
                 <groupId>com.jacolp</groupId>
                 <artifactId>middleware-module-audio-biz</artifactId>
+                <version>${middleware.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jacolp</groupId>
+                <artifactId>middleware-open-api-agent</artifactId>
                 <version>${middleware.version}</version>
             </dependency>
         </dependencies>

@@ -18,6 +18,12 @@
 
 [TOC]
 
+> **Phase 6 authorization notice (2026-08-13):** The legacy `/user/user/login`,
+> `/user/user/logout`, `/admin/user/login`, and `/admin/user/logout` entries retained below
+> are historical only and must not be called or regenerated. USER and ADMIN authentication now uses
+> `POST /auth/login` and `POST /auth/logout`; the authoritative business-route boundary is
+> [Phase 5 业务路由 Scope 目录](security/phase5-business-route-scope-catalog.md).
+
 
 
 

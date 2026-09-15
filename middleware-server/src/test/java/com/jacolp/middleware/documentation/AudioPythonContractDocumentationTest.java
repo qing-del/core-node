@@ -2,13 +2,13 @@ package com.jacolp.middleware.documentation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.jacolp.audio.biz.config.RabbitMqAudioTaskConfiguration;
-import com.jacolp.audio.biz.constant.AudioConstant;
-import com.jacolp.audio.biz.controller.common.AudioCallbackController;
-import com.jacolp.audio.biz.domain.dto.AudioCallbackFinishDTO;
-import com.jacolp.audio.biz.domain.dto.AudioCallbackStartDTO;
-import com.jacolp.audio.biz.service.RabbitMqTaskPublisher;
-import com.jacolp.result.Result;
+import com.jacolp.audio.config.RabbitMqAudioTaskConfiguration;
+import com.jacolp.audio.constant.AudioConstant;
+import com.jacolp.audio.controller.common.AudioCallbackController;
+import com.jacolp.audio.domain.dto.AudioCallbackFinishDTO;
+import com.jacolp.audio.domain.dto.AudioCallbackStartDTO;
+import com.jacolp.audio.service.RabbitMqTaskPublisher;
+import com.jacolp.common.core.result.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.file.Files;
 import java.nio.file.Path;

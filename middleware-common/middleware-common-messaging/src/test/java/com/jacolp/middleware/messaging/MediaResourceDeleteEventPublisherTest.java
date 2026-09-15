@@ -2,10 +2,10 @@ package com.jacolp.middleware.messaging;
 
 import java.util.List;
 
-import com.jacolp.middleware.messaging.constant.EventTypes;
-import com.jacolp.middleware.messaging.event.MediaResourceDeleteRequestedEvent;
-import com.jacolp.middleware.messaging.pulisher.MediaResourceDeleteEventPublisher;
-import com.jacolp.middleware.messaging.pulisher.OutboxEventPublisher;
+import com.jacolp.common.messaging.constant.EventTypes;
+import com.jacolp.common.messaging.event.MediaResourceDeleteRequestedEvent;
+import com.jacolp.common.messaging.pulisher.MediaResourceDeleteEventPublisher;
+import com.jacolp.common.messaging.pulisher.OutboxEventPublisher;
 import org.junit.jupiter.api.Test;
 
 import static org.mockito.ArgumentMatchers.anyString;

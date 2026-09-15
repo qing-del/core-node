@@ -18,6 +18,12 @@
 
 [TOC]
 
+> **Phase 6 authorization notice (2026-08-13):** The legacy `/user/user/login`,
+> `/user/user/logout`, `/admin/user/login`, and `/admin/user/logout` entries retained below
+> are historical only and must not be called or regenerated. USER and ADMIN authentication now uses
+> `POST /auth/login` and `POST /auth/logout`; the authoritative business-route boundary is
+> [Phase 5 业务路由 Scope 目录](security/phase5-business-route-scope-catalog.md).
+
 
 
 
@@ -4036,7 +4042,7 @@
 |&emsp;&emsp;username|登录用户名|string||
 |&emsp;&emsp;nickname|用户昵称|string||
 |&emsp;&emsp;email|邮箱地址|string||
-|&emsp;&emsp;roleId|角色ID：1-创建者，2-管理员，3-普通用户，4-VIP用户|integer(int64)||
+|&emsp;&emsp;roleId|角色ID：1-创建者，2-管理员，3-普通用户|integer(int64)||
 |&emsp;&emsp;status|账号状态：2-未激活，1-正常，0-禁用，-1-已删除|integer(int32)||
 |&emsp;&emsp;maxStorageBytes|用户个性化最大存储空间(字节)|integer(int64)||
 |&emsp;&emsp;usedStorageBytes|用户当前已用存储空间(字节)|integer(int64)||
@@ -4533,7 +4539,7 @@
 |&emsp;&emsp;username|Login username|string||
 |&emsp;&emsp;nickname|Nickname|string||
 |&emsp;&emsp;email|Email|string||
-|&emsp;&emsp;roleId|Role id: 1-creator, 2-admin, 3-user, 4-vip|integer(int64)||
+|&emsp;&emsp;roleId|Role id: 1-creator, 2-admin, 3-user|integer(int64)||
 |&emsp;&emsp;status|Status: 2-unactivated, 1-active, 0-disabled, -1-deleted|integer(int32)||
 |&emsp;&emsp;maxStorageBytes|Maximum storage bytes|integer(int64)||
 |&emsp;&emsp;usedStorageBytes|Used storage bytes|integer(int64)||

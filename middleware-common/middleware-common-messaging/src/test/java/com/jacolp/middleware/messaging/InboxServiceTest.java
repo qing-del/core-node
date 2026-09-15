@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.jacolp.middleware.messaging.base.EventEnvelope;
-import com.jacolp.middleware.messaging.service.InboxService;
+import com.jacolp.common.messaging.base.EventEnvelope;
+import com.jacolp.common.messaging.service.InboxService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;

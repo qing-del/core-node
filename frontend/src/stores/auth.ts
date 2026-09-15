@@ -1,10 +1,29 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import type { User } from '@/types'
 import router from '@/router'
+import {
+  clearStoredAuth,
+  hasAllGrantedScopes,
+  hasGrantedScope,
+  readAuthSession,
+  registerAuthSessionListener,
+  saveAuthSession,
+  type AuthClientId,
+  type AuthTokenResponse,
+  type StoredAuthSession
+} from '@/utils/authSession'
 
-type AuthScope = 'user' | 'admin'
+export interface PasswordLoginCredentials {
+  username: string
+  password: string
+}
+
+export interface EmailCodeLoginCredentials {
+  email: string
+  code: string
+}
 
 function isUnauthorizedError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
@@ -12,54 +31,84 @@ function isUnauthorizedError(error: unknown): boolean {
   return response?.status === 401
 }
 
-function readAuthScope(): AuthScope | null {
-  const scope = localStorage.getItem('authScope')
-  return scope === 'user' || scope === 'admin' ? scope : null
-}
-
-function getRouteAuthScope(): AuthScope | null {
-  const path = router.currentRoute.value.path
-  if (path.startsWith('/admin')) return 'admin'
-  if (path.startsWith('/user')) return 'user'
-  return null
-}
-
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('token'))
-  const authScope = ref<AuthScope | null>(readAuthScope())
+  const initialSession = readAuthSession()
+  const token = ref<string | null>(initialSession.accessToken)
+  const refreshToken = ref<string | null>(initialSession.refreshToken)
+  const authClientId = ref<AuthClientId | null>(initialSession.clientId)
+  const scopes = ref<string[]>(initialSession.scopes)
   const user = ref<User | null>(null)
 
   const isAuthenticated = computed(() => !!token.value)
-  const isAdmin = computed(() => (user.value ? user.value.roleId <= 2 : false))
+  const isAdmin = computed(() => authClientId.value === 'admin')
+  // Kept as a compatibility alias for existing consumers; it represents client boundary, not permission.
+  const authScope = authClientId
 
-  function setToken(newToken: string) {
-    token.value = newToken
-    localStorage.setItem('token', newToken)
+  function applySession(session: StoredAuthSession) {
+    token.value = session.accessToken
+    refreshToken.value = session.refreshToken
+    authClientId.value = session.clientId
+    scopes.value = [...session.scopes]
   }
 
-  function setAuthScope(scope: AuthScope) {
-    authScope.value = scope
-    localStorage.setItem('authScope', scope)
+  function applyTokenResponse(response: AuthTokenResponse, clientId: AuthClientId) {
+    applySession(saveAuthSession(response, clientId))
   }
 
-  function setUser(newUser: User) {
+  function setUser(newUser: User | null) {
     user.value = newUser
   }
 
-  async function login(credentials: { username: string; password: string }) {
-    const res = await authApi.login(credentials)
-    setToken(res as unknown as string)
-    setAuthScope('user')
-    await fetchUserInfo()
+  function hasScope(requiredScope: string): boolean {
+    return hasGrantedScope(scopes.value, requiredScope)
+  }
+
+  function hasAllScopes(requiredScopes: readonly string[]): boolean {
+    return hasAllGrantedScopes(scopes.value, requiredScopes)
+  }
+
+  async function authenticate(clientId: AuthClientId, credentials: PasswordLoginCredentials | EmailCodeLoginCredentials) {
+    const response = 'username' in credentials
+      ? await authApi.login({
+          client_id: clientId,
+          grant_type: 'password',
+          username: credentials.username,
+          password: credentials.password
+        })
+      : await authApi.login({
+          client_id: clientId,
+          grant_type: 'email-code',
+          email: credentials.email,
+          code: credentials.code
+        })
+
+    applyTokenResponse(response, clientId)
+    if (clientId === 'admin') {
+      await fetchAdminUserInfo()
+    } else {
+      await fetchUserInfo()
+    }
     return user.value
   }
 
-  async function adminLogin(credentials: { username: string; password: string }) {
-    const res = await authApi.adminLogin(credentials)
-    setToken(res as unknown as string)
-    setAuthScope('admin')
-    await fetchAdminUserInfo()
-    return user.value
+  async function login(credentials: PasswordLoginCredentials) {
+    return authenticate('user', credentials)
+  }
+
+  async function loginWithEmailCode(credentials: EmailCodeLoginCredentials) {
+    return authenticate('user', credentials)
+  }
+
+  async function adminLogin(credentials: PasswordLoginCredentials) {
+    return authenticate('admin', credentials)
+  }
+
+  async function adminLoginWithEmailCode(credentials: EmailCodeLoginCredentials) {
+    return authenticate('admin', credentials)
+  }
+
+  async function requestEmailCode(email: string, clientId: AuthClientId = 'user') {
+    return authApi.requestEmailCode({ client_id: clientId, email })
   }
 
   async function register(data: { username: string; password: string; confirmPassword: string; email: string }) {
@@ -78,12 +127,11 @@ export const useAuthStore = defineStore('auth', () => {
     if (!token.value) return null
     try {
       const userInfo = await authApi.getCurrentUser()
-      setAuthScope('user')
       setUser(userInfo)
       return userInfo
     } catch (error) {
       if (isUnauthorizedError(error)) {
-        logout({ withServer: false })
+        clearSession({ withServer: false })
         return null
       }
       throw error
@@ -92,74 +140,74 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchAdminUserInfo() {
     if (!token.value) return null
-    if (getRouteAuthScope() === 'user') {
-      return fetchUserInfo()
-    }
     try {
       const userInfo = await authApi.getCurrentAdminUser()
-      setAuthScope('admin')
       setUser(userInfo)
       return userInfo
     } catch (error) {
       if (isUnauthorizedError(error)) {
-        logout({ withServer: false })
+        clearSession({ withServer: false })
         return null
       }
       throw error
     }
   }
 
-  function clearSession() {
-    token.value = null
-    authScope.value = null
-    user.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('authScope')
-    router.push('/login')
-  }
-
-  function adminLogout(options?: { withServer?: boolean }) {
-    const withServer = options?.withServer ?? true
-    if (withServer) {
-      void authApi.adminLogout().catch(() => {})
+  function clearSession(options?: { withServer?: boolean; redirect?: boolean; clearStorage?: boolean }) {
+    const withServer = options?.withServer ?? false
+    if (withServer && token.value) {
+      // Capture the access token before clearing storage so the logout request cannot race the cleanup.
+      void authApi.logout(token.value).catch(() => {})
     }
-    clearSession()
+    if (options?.clearStorage !== false) clearStoredAuth()
+    token.value = null
+    refreshToken.value = null
+    authClientId.value = null
+    scopes.value = []
+    setUser(null)
+    if (options?.redirect !== false && router.currentRoute.value.path !== '/login') {
+      void router.push('/login')
+    }
   }
 
   function logout(options?: { withServer?: boolean }) {
-    const withServer = options?.withServer ?? true
-    if (withServer) {
-      void authApi.logout().catch(() => {})
-    }
-    clearSession()
+    clearSession({ withServer: options?.withServer ?? true })
+  }
+
+  function adminLogout(options?: { withServer?: boolean }) {
+    logout(options)
   }
 
   async function updateProfile(data: { nickname?: string; email?: string; password?: string; newPassword?: string; confirmPassword?: string }) {
     return authApi.updateProfile(data)
   }
 
-  async function refreshCurrentUserInfo(scope?: AuthScope) {
-    if (scope === 'user') {
-      return fetchUserInfo()
-    }
-    if (scope === 'admin') {
-      return fetchAdminUserInfo()
-    }
-    const resolvedScope = getRouteAuthScope() ?? authScope.value ?? 'user'
-    if (resolvedScope === 'admin') {
-      return fetchAdminUserInfo()
-    }
-    return fetchUserInfo()
+  async function refreshCurrentUserInfo(scope?: AuthClientId) {
+    const resolvedClientId = scope ?? authClientId.value ?? 'user'
+    return resolvedClientId === 'admin' ? fetchAdminUserInfo() : fetchUserInfo()
   }
+
+  registerAuthSessionListener({
+    onUpdated: applySession,
+    onCleared: () => clearSession({ withServer: false, clearStorage: false })
+  })
 
   return {
     token,
+    refreshToken,
+    authClientId,
     authScope,
+    scopes,
     user,
     isAuthenticated,
     isAdmin,
+    hasScope,
+    hasAllScopes,
     login,
+    loginWithEmailCode,
     adminLogin,
+    adminLoginWithEmailCode,
+    requestEmailCode,
     register,
     resendActivation,
     verifyActivationCode,

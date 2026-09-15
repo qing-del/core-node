@@ -1,23 +1,15 @@
 USE `personal_saas`;
 
-# -- ==========================================
-# -- 1. 角色表 (sys_role)
-# -- 脚本中已包含初始化，这里补充一个过期/特殊的角色作为测试 (可选)
-# -- ==========================================
-# INSERT INTO `sys_role` (`role_name`, `role_code`, `daily_api_limit`) VALUES
-#     ('访客', 'GUEST', 1);
-
-
 -- ==========================================
 -- 2. 用户表 (sys_user)
 -- 密码统一使用 BCrypt 加密的 "123456": $2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K
 -- ==========================================
-INSERT INTO `sys_user` (`id`, `username`, `password`, `nickname`, `email`, `role_id`, `status`) VALUES
-                                                                                                    (1, 'creator_admin', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '系统创建者', 'creator@example.com', 1, 1),
-                                                                                                    (2, 'zhangsan', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '张三', 'zhangsan@test.com', 3, 1),
-                                                                                                    (3, 'lisi_vip', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '李四VIP', 'lisi@test.com', 4, 1),
-                                                                                                    (4, 'disabled_user', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '被禁用用户', 'badboy@test.com', 3, 0),
-                                                                                                    (5, 'new_user_wait_active', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '未激活用户', 'wait_active@test.com', 3, 2);
+INSERT INTO `sys_user` (`id`, `username`, `password`, `nickname`, `email`, `role_id`, `extra_grant_types`, `status`) VALUES
+                                                                                                    (1, 'creator_admin', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '系统创建者', 'creator@example.com', 1, '', 1),
+                                                                                                    (2, 'zhangsan', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '张三', 'zhangsan@test.com', 3, '', 1),
+                                                                                                    (3, 'lisi_user', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '李四用户', 'lisi@test.com', 3, '', 1),
+                                                                                                    (4, 'disabled_user', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '被禁用用户', 'badboy@test.com', 3, '', 0),
+                                                                                                    (5, 'new_user_wait_active', '$2a$10$8K1p/a0dxE.Y8L.oUIn8Lu7Yl18f5pI1O3vS7l6f9Y.f9Uo7i8I6K', '未激活用户', 'wait_active@test.com', 3, '', 2);
 
 
 -- ==========================================

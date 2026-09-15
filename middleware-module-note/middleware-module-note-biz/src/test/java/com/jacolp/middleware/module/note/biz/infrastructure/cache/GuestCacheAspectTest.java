@@ -2,12 +2,12 @@ package com.jacolp.middleware.module.note.biz.infrastructure.cache;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.jacolp.module.note.biz.infrastructure.cache.GuestCacheAspect;
-import com.jacolp.module.note.biz.infrastructure.cache.GuestCacheConstant;
+import com.jacolp.note.infrastructure.cache.GuestCacheAspect;
+import com.jacolp.note.infrastructure.cache.GuestCacheConstant;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import com.jacolp.module.note.biz.application.dto.note.PublicNoteQueryDTO;
+import com.jacolp.note.application.dto.note.PublicNoteQueryDTO;
 
 class GuestCacheAspectTest {
 

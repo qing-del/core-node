@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jacolp.module.system.biz.infrastructure.persistence.mapper.ApiDailyUsageMapper">
+<mapper namespace="com.jacolp.system.infrastructure.persistence.mapper.ApiDailyUsageMapper">
 
     <insert id="incrementUsage">
         INSERT INTO biz_api_daily_usage (user_id, record_date, used_count)

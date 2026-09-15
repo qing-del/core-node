@@ -1,22 +1,23 @@
 package com.jacolp.middleware.module.audit.biz.application.service;
 
-import com.jacolp.constant.AuditConstant;
-import com.jacolp.context.BaseContext;
-import com.jacolp.enums.AuditStatus;
-import com.jacolp.exception.BaseException;
-import com.jacolp.middleware.messaging.event.AuditReviewedEvent;
-import com.jacolp.middleware.messaging.constant.EventTypes;
-import com.jacolp.middleware.messaging.pulisher.OutboxEventPublisher;
-import com.jacolp.module.audit.biz.application.dto.AuditBatchReviewDTO;
-import com.jacolp.module.audit.biz.application.service.AuditReviewService;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.ImageAuditRecordDO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.MetaAuditRecordDO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.NoteAuditRecordDO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.ImageAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.MetaAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.NoteAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.AuditQueryProjectionMapper;
+import com.jacolp.common.core.constant.AuditConstant;
+import com.jacolp.common.core.enums.AuditStatus;
+import com.jacolp.common.core.exception.BaseException;
+import com.jacolp.common.messaging.constant.EventTypes;
+import com.jacolp.common.messaging.event.AuditReviewedEvent;
+import com.jacolp.audit.support.TestSecurityContext;
+import com.jacolp.common.messaging.pulisher.OutboxEventPublisher;
+import com.jacolp.audit.application.dto.AuditBatchReviewDTO;
+import com.jacolp.audit.application.service.AuditReviewService;
+import com.jacolp.audit.infrastructure.persistence.dataobject.ImageAuditRecordDO;
+import com.jacolp.audit.infrastructure.persistence.dataobject.MetaAuditRecordDO;
+import com.jacolp.audit.infrastructure.persistence.dataobject.NoteAuditRecordDO;
+import com.jacolp.audit.infrastructure.persistence.mapper.ImageAuditMapper;
+import com.jacolp.audit.infrastructure.persistence.mapper.MetaAuditMapper;
+import com.jacolp.audit.infrastructure.persistence.mapper.NoteAuditMapper;
+import com.jacolp.audit.infrastructure.persistence.mapper.AuditQueryProjectionMapper;
 import java.util.List;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,11 +51,11 @@ class AuditReviewServiceTest {
         projections = mock(AuditQueryProjectionMapper.class);
         when(projections.selectUsername(9L)).thenReturn("reviewer");
         service = new AuditReviewService(metaMapper, imageMapper, noteMapper, eventPublisher, projections);
-        BaseContext.setCurrentId(9L);
+        TestSecurityContext.authenticate(9L, false);
     }
 
     @AfterEach
-    void cleanContext() { BaseContext.remove(); }
+    void cleanContext() { TestSecurityContext.clear(); }
 
     @Test
     @SuppressWarnings("unchecked")

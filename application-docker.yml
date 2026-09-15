@@ -28,13 +28,15 @@ jacolp:
     username: ${jacolp.admin.username:admin}
     password: ${jacolp.admin.password}
   default-password: ${jacolp.default-password:123456}
+  oauth2:
+    browser-login:
+      csrf-enabled: false
+    rs256:
+      issuer: ${OAUTH2_RS256_ISSUER:core-node}
+      audience: ${OAUTH2_RS256_AUDIENCE:core-node-api}
+      private-key-location: ${OAUTH2_RS256_PRIVATE_KEY_LOCATION:file:/run/secrets/oauth2-rs256/private.pem}
+      public-key-location: ${OAUTH2_RS256_PUBLIC_KEY_LOCATION:file:/run/secrets/oauth2-rs256/public.pem}
   jwt:
-    admin-secret-key: ${jwt.admin-secret-key}
-    admin-ttl: 7200000
-    admin-token-name: ${jwt.admin-token-name:adminToken}
-    user-secret-key: ${jwt.user-secret-key}
-    user-ttl: 7200000
-    user-token-name: ${jwt.user-token-name:userToken}
     active-secret-key: ${jacolp.jwt.active-secret-key}
     active-ttl: 900000
     active-code-ttl: 300000

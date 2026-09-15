@@ -1,8 +1,8 @@
 package com.jacolp.middleware.module.note.biz.domain.note;
 
-import com.jacolp.enums.NoteMissingInfoMask;
-import com.jacolp.enums.NoteStatus;
-import com.jacolp.module.note.biz.domain.note.NoteMissingInfo;
+import com.jacolp.note.enums.NoteMissingInfoMask;
+import com.jacolp.note.enums.NoteStatus;
+import com.jacolp.note.domain.note.NoteMissingInfo;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

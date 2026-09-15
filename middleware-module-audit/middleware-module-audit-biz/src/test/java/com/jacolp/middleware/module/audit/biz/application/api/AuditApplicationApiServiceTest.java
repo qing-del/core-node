@@ -10,21 +10,20 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.jacolp.module.audit.api.AuditApplicationResult;
-import com.jacolp.module.audit.api.AuditTargetType;
-import com.jacolp.module.audit.api.CancelAuditApplicationCommand;
-import com.jacolp.module.audit.api.CreateAuditApplicationCommand;
-import com.jacolp.module.audit.biz.application.api.AuditApplicationApiService;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.ImageAuditRecordDO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.MetaAuditRecordDO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.NoteAuditRecordDO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.AuditQueryProjectionMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.ImageAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.MetaAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.NoteAuditMapper;
+import com.jacolp.audit.api.AuditApplicationResult;
+import com.jacolp.audit.api.AuditTargetType;
+import com.jacolp.audit.api.CancelAuditApplicationCommand;
+import com.jacolp.audit.api.CreateAuditApplicationCommand;
+import com.jacolp.audit.application.api.AuditApplicationApiService;
+import com.jacolp.audit.infrastructure.persistence.dataobject.ImageAuditRecordDO;
+import com.jacolp.audit.infrastructure.persistence.dataobject.MetaAuditRecordDO;
+import com.jacolp.audit.infrastructure.persistence.dataobject.NoteAuditRecordDO;
+import com.jacolp.audit.infrastructure.persistence.mapper.AuditQueryProjectionMapper;
+import com.jacolp.audit.infrastructure.persistence.mapper.ImageAuditMapper;
+import com.jacolp.audit.infrastructure.persistence.mapper.MetaAuditMapper;
+import com.jacolp.audit.infrastructure.persistence.mapper.NoteAuditMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 class AuditApplicationApiServiceTest {
 

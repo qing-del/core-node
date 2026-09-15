@@ -1,11 +1,12 @@
 package com.jacolp.middleware.module.media.biz.application.event;
 
-import com.jacolp.middleware.messaging.event.AuditReviewedEvent;
-import com.jacolp.middleware.messaging.base.EventSequenceGuard;
-import com.jacolp.module.media.biz.application.event.MediaAuditReviewedEventHandler;
-import com.jacolp.module.media.biz.infrastructure.persistence.mapper.ImageMapper;
+import com.jacolp.common.messaging.base.EventSequenceGuard;
+import com.jacolp.common.messaging.event.AuditReviewedEvent;
+import com.jacolp.media.application.event.MediaAuditReviewedEventHandler;
+import com.jacolp.media.infrastructure.persistence.mapper.ImageMapper;
 import java.time.Instant;
 import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

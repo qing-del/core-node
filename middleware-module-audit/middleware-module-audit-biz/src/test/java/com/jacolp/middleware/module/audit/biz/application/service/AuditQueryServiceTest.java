@@ -1,16 +1,16 @@
 package com.jacolp.middleware.module.audit.biz.application.service;
 
 import com.github.pagehelper.PageHelper;
-import com.jacolp.module.audit.biz.application.dto.ImageAuditListDTO;
-import com.jacolp.module.audit.biz.application.dto.MetaAuditListDTO;
-import com.jacolp.module.audit.biz.application.dto.NoteAuditListDTO;
-import com.jacolp.module.audit.biz.application.service.AuditQueryService;
-import com.jacolp.module.audit.biz.application.vo.ImageAuditVO;
-import com.jacolp.module.audit.biz.application.vo.MetaAuditVO;
-import com.jacolp.module.audit.biz.application.vo.NoteAuditVO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.ImageAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.MetaAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.NoteAuditMapper;
+import com.jacolp.audit.application.dto.ImageAuditListDTO;
+import com.jacolp.audit.application.dto.MetaAuditListDTO;
+import com.jacolp.audit.application.dto.NoteAuditListDTO;
+import com.jacolp.audit.application.service.AuditQueryService;
+import com.jacolp.audit.application.vo.ImageAuditVO;
+import com.jacolp.audit.application.vo.MetaAuditVO;
+import com.jacolp.audit.application.vo.NoteAuditVO;
+import com.jacolp.audit.infrastructure.persistence.mapper.ImageAuditMapper;
+import com.jacolp.audit.infrastructure.persistence.mapper.MetaAuditMapper;
+import com.jacolp.audit.infrastructure.persistence.mapper.NoteAuditMapper;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
