@@ -151,7 +151,7 @@ function normalizeResourceReference(node: IdentityXmlElement, path: string): boo
     changed = true;
   } else {
     validateNodeId(nodeId, path);
-    if (nodeId !== refId) {
+    if (nodeId.toLowerCase() !== refId.toLowerCase()) {
       throw new NodeIdentityMigrationError(`${path}: nodeId must equal refId`);
     }
   }

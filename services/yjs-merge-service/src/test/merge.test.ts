@@ -168,6 +168,23 @@ test('resource reference identity mismatch fails without silent overwrite', () =
   );
 });
 
+test('resource reference identity accepts UUIDs that differ only by case', () => {
+  const source = new Y.Doc();
+  const reference = new Y.XmlElement('resourceReference');
+  reference.setAttribute('refId', '550E8400-E29B-41D4-A716-446655440004');
+  reference.setAttribute('nodeId', '550e8400-e29b-41d4-a716-446655440004');
+  setNodeVersion(reference, 2);
+  source.getXmlFragment('content').insert(0, [reference]);
+
+  const result = migrateYjsNodeIdentity({
+    baseState: toBase64(Y.encodeStateAsUpdate(source)),
+    updates: [],
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.registeredNodeCount, 1);
+});
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function toBase64(update: Uint8Array): string {
