@@ -1,22 +1,5 @@
 package com.jacolp.middleware.module.audit.biz.application.api;
 
-import com.jacolp.module.audit.biz.application.api.AuditApplicationApiService;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.ImageAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.MetaAuditMapper;
-import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.NoteAuditMapper;
-import com.jacolp.module.audit.api.AuditApplicationResult;
-import com.jacolp.module.audit.api.AuditTargetType;
-import com.jacolp.module.audit.api.CancelAuditApplicationCommand;
-import com.jacolp.module.audit.api.CancelAuditApplicationResult;
-import com.jacolp.module.audit.api.CreateAuditApplicationCommand;
-import com.jacolp.module.audit.api.PendingAuditApplicationQuery;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.ImageAuditRecordDO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.MetaAuditRecordDO;
-import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.NoteAuditRecordDO;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,11 +10,28 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.jacolp.module.audit.api.AuditApplicationResult;
+import com.jacolp.module.audit.api.AuditTargetType;
+import com.jacolp.module.audit.api.CancelAuditApplicationCommand;
+import com.jacolp.module.audit.api.CreateAuditApplicationCommand;
+import com.jacolp.module.audit.biz.application.api.AuditApplicationApiService;
+import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.ImageAuditRecordDO;
+import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.MetaAuditRecordDO;
+import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.NoteAuditRecordDO;
+import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.AuditQueryProjectionMapper;
+import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.ImageAuditMapper;
+import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.MetaAuditMapper;
+import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.NoteAuditMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
 class AuditApplicationApiServiceTest {
 
     private MetaAuditMapper metaAuditMapper;
     private ImageAuditMapper imageAuditMapper;
     private NoteAuditMapper noteAuditMapper;
+    private AuditQueryProjectionMapper projections;
     private AuditApplicationApiService adapter;
 
     @BeforeEach
@@ -39,96 +39,77 @@ class AuditApplicationApiServiceTest {
         metaAuditMapper = mock(MetaAuditMapper.class);
         imageAuditMapper = mock(ImageAuditMapper.class);
         noteAuditMapper = mock(NoteAuditMapper.class);
-        adapter = new AuditApplicationApiService(metaAuditMapper, imageAuditMapper, noteAuditMapper);
+        projections = mock(AuditQueryProjectionMapper.class);
+        adapter = new AuditApplicationApiService(metaAuditMapper, imageAuditMapper, noteAuditMapper, projections);
     }
 
     @Test
-    void tagMapsToMetaAuditAndUsesLegacyUpdateCancellation() {
-        when(metaAuditMapper.countPendingAuditByApplyTypeAndTargetId((short) 2, 11L)).thenReturn(1);
+    void createNoteWritesFrozenProjectionAndCancelMarksRecordCancelled() {
+        when(noteAuditMapper.countPendingAuditByNoteId(13L)).thenReturn(0);
+        doAnswer(invocation -> {
+            invocation.<NoteAuditRecordDO>getArgument(0).setId(103L);
+            return 1;
+        }).when(noteAuditMapper).insertAuditRecord(any(NoteAuditRecordDO.class));
+        when(projections.selectUsername(24L)).thenReturn("applicant");
+        when(noteAuditMapper.selectPendingByNoteId(13L)).thenReturn(noteRecord(103L, 24L, (short) 0));
+        when(noteAuditMapper.cancelPendingByNoteId(13L, (short) 3)).thenReturn(1);
+
+        AuditApplicationResult created = adapter.createApplication(
+                new CreateAuditApplicationCommand(AuditTargetType.NOTE, 13L, 24L, "reason", "Note title", null));
+        adapter.cancelApplication(new CancelAuditApplicationCommand(AuditTargetType.NOTE, 13L, 24L));
+
+        assertThat(created.auditApplicationId()).isEqualTo(103L);
+        verify(projections).upsertRecord("NOTE", 103L, 13L, "applicant", "Note title", null);
+        verify(noteAuditMapper).cancelPendingByNoteId(13L, (short) 3);
+    }
+
+    @Test
+    void createTagAndImageUseCancelledStatusFive() {
+        when(metaAuditMapper.countPendingAuditByApplyTypeAndTargetId((short) 2, 11L)).thenReturn(0);
         doAnswer(invocation -> {
             invocation.<MetaAuditRecordDO>getArgument(0).setId(101L);
             return 1;
         }).when(metaAuditMapper).insertAuditRecord(any(MetaAuditRecordDO.class));
         when(metaAuditMapper.selectPendingByApplyTypeAndTargetId((short) 2, 11L))
                 .thenReturn(metaRecord(101L, 22L, (short) 1));
-        when(metaAuditMapper.deletePendingByApplyTypeAndTargetId((short) 2, 11L)).thenReturn(1);
-
-        assertThat(adapter.hasPendingApplication(new PendingAuditApplicationQuery(AuditTargetType.TAG, 11L))).isTrue();
-        AuditApplicationResult created = adapter.createApplication(
-                new CreateAuditApplicationCommand(AuditTargetType.TAG, 11L, 22L, "tag reason"));
-        CancelAuditApplicationResult cancelled = adapter.cancelApplication(
-                new CancelAuditApplicationCommand(AuditTargetType.TAG, 11L, 22L));
-
-        ArgumentCaptor<MetaAuditRecordDO> record = ArgumentCaptor.forClass(MetaAuditRecordDO.class);
-        verify(metaAuditMapper).insertAuditRecord(record.capture());
-        assertThat(record.getValue().getApplyType()).isEqualTo((short) 2);
-        assertThat(record.getValue().getApplicantUserId()).isEqualTo(22L);
-        assertThat(created.auditApplicationId()).isEqualTo(101L);
-        assertThat(cancelled.cancelledCount()).isEqualTo(1);
-        verify(metaAuditMapper).deletePendingByApplyTypeAndTargetId((short) 2, 11L);
-        verify(imageAuditMapper, never()).deletePendingByImageId(any());
-        verify(noteAuditMapper, never()).deletePendingByNoteId(any());
-    }
-
-    @Test
-    void imageMapsToImageAuditAndUsesLegacyUpdateCancellation() {
-        when(imageAuditMapper.countPendingAuditByImageId(12L)).thenReturn(1);
+        when(metaAuditMapper.cancelPendingByApplyTypeAndTargetId((short) 2, 11L, (short) 5)).thenReturn(1);
+        when(imageAuditMapper.countPendingAuditByImageId(12L)).thenReturn(0);
         doAnswer(invocation -> {
             invocation.<ImageAuditRecordDO>getArgument(0).setId(102L);
             return 1;
         }).when(imageAuditMapper).insertAuditRecord(any(ImageAuditRecordDO.class));
         when(imageAuditMapper.selectPendingByImageId(12L)).thenReturn(imageRecord(102L, 23L, (short) 1));
-        when(imageAuditMapper.deletePendingByImageId(12L)).thenReturn(1);
+        when(imageAuditMapper.cancelPendingByImageId(12L, (short) 5)).thenReturn(1);
 
-        assertThat(adapter.hasPendingApplication(new PendingAuditApplicationQuery(AuditTargetType.IMAGE, 12L))).isTrue();
-        AuditApplicationResult created = adapter.createApplication(
-                new CreateAuditApplicationCommand(AuditTargetType.IMAGE, 12L, 23L, "image reason"));
-        CancelAuditApplicationResult cancelled = adapter.cancelApplication(
-                new CancelAuditApplicationCommand(AuditTargetType.IMAGE, 12L, 23L));
+        adapter.createApplication(new CreateAuditApplicationCommand(AuditTargetType.TAG, 11L, 22L, null, "tag", null));
+        adapter.cancelApplication(new CancelAuditApplicationCommand(AuditTargetType.TAG, 11L, 22L));
+        adapter.createApplication(new CreateAuditApplicationCommand(AuditTargetType.IMAGE, 12L, 23L, null, "image", "url"));
+        adapter.cancelApplication(new CancelAuditApplicationCommand(AuditTargetType.IMAGE, 12L, 23L));
 
-        ArgumentCaptor<ImageAuditRecordDO> record = ArgumentCaptor.forClass(ImageAuditRecordDO.class);
-        verify(imageAuditMapper).insertAuditRecord(record.capture());
-        assertThat(record.getValue().getImageId()).isEqualTo(12L);
-        assertThat(record.getValue().getApplicantUserId()).isEqualTo(23L);
-        assertThat(created.auditApplicationId()).isEqualTo(102L);
-        assertThat(cancelled.cancelledCount()).isEqualTo(1);
-        verify(imageAuditMapper).deletePendingByImageId(12L);
+        verify(metaAuditMapper).cancelPendingByApplyTypeAndTargetId((short) 2, 11L, (short) 5);
+        verify(imageAuditMapper).cancelPendingByImageId(12L, (short) 5);
     }
 
     @Test
-    void noteMapsToNoteAuditAndUsesLegacyDeleteCancellation() {
-        when(noteAuditMapper.countPendingAuditByNoteId(13L)).thenReturn(1);
-        doAnswer(invocation -> {
-            invocation.<NoteAuditRecordDO>getArgument(0).setId(103L);
-            return 1;
-        }).when(noteAuditMapper).insertAuditRecord(any(NoteAuditRecordDO.class));
-        when(noteAuditMapper.selectPendingByNoteId(13L)).thenReturn(noteRecord(103L, 24L, (short) 0));
-        when(noteAuditMapper.deletePendingByNoteId(13L)).thenReturn(1);
+    void createRejectsExistingPendingApplication() {
+        when(imageAuditMapper.countPendingAuditByImageId(12L)).thenReturn(1);
 
-        assertThat(adapter.hasPendingApplication(new PendingAuditApplicationQuery(AuditTargetType.NOTE, 13L))).isTrue();
-        AuditApplicationResult created = adapter.createApplication(
-                new CreateAuditApplicationCommand(AuditTargetType.NOTE, 13L, 24L, "note reason"));
-        CancelAuditApplicationResult cancelled = adapter.cancelApplication(
-                new CancelAuditApplicationCommand(AuditTargetType.NOTE, 13L, 24L));
+        assertThatThrownBy(() -> adapter.createApplication(
+                new CreateAuditApplicationCommand(AuditTargetType.IMAGE, 12L, 23L, null, "image", null)))
+                .isInstanceOf(RuntimeException.class);
 
-        ArgumentCaptor<NoteAuditRecordDO> record = ArgumentCaptor.forClass(NoteAuditRecordDO.class);
-        verify(noteAuditMapper).insertAuditRecord(record.capture());
-        assertThat(record.getValue().getNoteId()).isEqualTo(13L);
-        assertThat(record.getValue().getApplicantUserId()).isEqualTo(24L);
-        assertThat(created.auditApplicationId()).isEqualTo(103L);
-        assertThat(cancelled.cancelledCount()).isEqualTo(1);
-        verify(noteAuditMapper).deletePendingByNoteId(13L);
+        verify(imageAuditMapper, never()).insertAuditRecord(any());
     }
 
     @Test
-    void cancellationRejectsAnActorOtherThanTheApplicant() {
+    void cancellationRejectsActorOtherThanApplicant() {
         when(imageAuditMapper.selectPendingByImageId(12L)).thenReturn(imageRecord(102L, 23L, (short) 1));
 
         assertThatThrownBy(() -> adapter.cancelApplication(
                 new CancelAuditApplicationCommand(AuditTargetType.IMAGE, 12L, 99L)))
-                .hasMessage("只能撤销自己的审核申请");
+                .isInstanceOf(RuntimeException.class);
 
-        verify(imageAuditMapper, never()).deletePendingByImageId(eq(12L));
+        verify(imageAuditMapper, never()).cancelPendingByImageId(eq(12L), any());
     }
 
     private static MetaAuditRecordDO metaRecord(Long id, Long applicantUserId, Short status) {

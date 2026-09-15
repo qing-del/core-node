@@ -149,6 +149,11 @@
             </dependency>
             <dependency>
                 <groupId>com.jacolp</groupId>
+                <artifactId>middleware-common-messaging</artifactId>
+                <version>${middleware.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jacolp</groupId>
                 <artifactId>middleware-common-security</artifactId>
                 <version>${middleware.version}</version>
             </dependency>

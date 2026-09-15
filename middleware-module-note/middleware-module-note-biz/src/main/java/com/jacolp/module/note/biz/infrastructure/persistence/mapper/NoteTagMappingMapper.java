@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface NoteTagMappingMapper {
@@ -57,6 +58,9 @@ public interface NoteTagMappingMapper {
 
 
     int updateByTagIds(@Param("tagIds") List<Long> tagIds, @Param("status") Short status);
+    @Update("UPDATE biz_note_tag_mapping SET status = #{status}, update_time = NOW() " +
+            "WHERE tag_id = #{tagId} AND is_deleted = 0")
+    int updateActiveByTagId(@Param("tagId") Long tagId, @Param("status") Short status);
 
     /**
      * 统计指定笔记的未绑定标签数量

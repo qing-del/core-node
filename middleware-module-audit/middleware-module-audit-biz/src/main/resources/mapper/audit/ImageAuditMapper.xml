@@ -55,7 +55,7 @@
             </if>
             review_time = NOW()
         </set>
-        WHERE id = #{id}
+        WHERE id = #{id} AND status = 1
     </update>
 
     <!-- 条件查询审核列表（管理员用）-->
@@ -63,15 +63,21 @@
         SELECT
             a.id,
             a.applicant_user_id,
+            snapshot.applicant_username,
             a.image_id,
+            snapshot.target_name AS filename,
+            snapshot.target_url AS oss_url,
             a.apply_reason,
             a.status,
             a.reviewer_user_id,
+            snapshot.reviewer_username,
             a.reject_reason,
             a.create_time,
             a.review_time,
             a.update_time
         FROM biz_image_audit_record a
+        LEFT JOIN audit_query_record_projection snapshot
+               ON snapshot.target_type = 'IMAGE' AND snapshot.audit_id = a.id
         <where>
             <if test="status != null">a.status = #{status}</if>
             <if test="applicantUserId != null">AND a.applicant_user_id = #{applicantUserId}</if>

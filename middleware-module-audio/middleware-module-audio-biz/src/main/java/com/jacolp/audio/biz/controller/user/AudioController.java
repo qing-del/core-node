@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,6 +42,13 @@ public class AudioController {
         return Result.success(audioTaskService.submitTask(dto));
     }
 
+    @PostMapping("/retry/{taskId}")
+    @Operation(summary = "重试失败的音频任务", description = "仅允许重试当前用户处于失败状态的任务；原任务将标记为已重试，并创建新任务进入待处理队列。")
+    public Result<AudioTaskSubmitVO> retry(@Parameter(description = "任务 ID") @PathVariable Long taskId) {
+        log.info("User retry audio task, taskId: {}", taskId);
+        return Result.success(audioTaskService.retryFailedTask(taskId));
+    }
+
     @GetMapping("/status/{taskId}")
     @Operation(summary = "查询音频任务状态", description = "根据 taskId 查询任务当前状态与结果链接，仅能查询当前用户自己的任务。")
     public Result<AudioTaskVO> getStatus(@Parameter(description = "任务ID") @PathVariable Long taskId) {
@@ -53,5 +61,19 @@ public class AudioController {
     public Result<PageResult> listTasks(@Parameter(description = "分页参数") @Valid @RequestBody AudioTaskPageQueryDTO queryDTO) {
         log.info("User list audio tasks, page: {}, size: {}", queryDTO.getPageNum(), queryDTO.getPageSize());
         return Result.success(audioTaskService.listTasks(queryDTO));
+    }
+
+    @PostMapping("/cancel/{taskId}")
+    @Operation(summary = "取消音频任务", description = "仅允许取消当前用户处于 PENDING 或 PROCESSING 状态的任务。")
+    public Result<Boolean> cancelTask(
+            @Parameter(description = "任务 ID") @PathVariable Long taskId) {
+        return Result.success(audioTaskService.cancelTask(taskId));
+    }
+
+    @DeleteMapping("/{taskId}")
+    @Operation(summary = "删除音频任务", description = "删除当前用户的任务，并通过 MQ 通知 Python 清理对应资源。")
+    public Result<Boolean> deleteTask(
+            @Parameter(description = "任务 ID") @PathVariable Long taskId) {
+        return Result.success(audioTaskService.deleteTask(taskId));
     }
 }

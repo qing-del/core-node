@@ -5,6 +5,7 @@
     <parent><groupId>com.jacolp</groupId><artifactId>middleware-module-audit</artifactId><version>0.0.1-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
     <artifactId>middleware-module-audit-api</artifactId>
     <dependencies>
+        <dependency><groupId>com.jacolp</groupId><artifactId>middleware-common-core</artifactId></dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

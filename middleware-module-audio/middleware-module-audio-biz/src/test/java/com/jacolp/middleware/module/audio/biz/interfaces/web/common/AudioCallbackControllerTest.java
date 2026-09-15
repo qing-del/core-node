@@ -1,7 +1,9 @@
 package com.jacolp.middleware.module.audio.biz.interfaces.web.common;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jacolp.audio.biz.controller.common.AudioCallbackController;
 import com.jacolp.exception.AuthenticationException;
+import com.jacolp.audio.biz.domain.dto.AudioCallbackFinishDTO;
 import com.jacolp.audio.biz.domain.dto.AudioCallbackStartDTO;
 import com.jacolp.audio.biz.service.AudioTaskService;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +33,7 @@ class AudioCallbackControllerTest {
     void validTokenCallsServiceAndReturnsItsResult() {
         AudioCallbackStartDTO dto = new AudioCallbackStartDTO();
         dto.setTaskId(10L);
+        dto.setAttempt(0);
         MockHttpServletRequest request = request("callback-secret");
         when(audioTaskService.callbackStart(dto)).thenReturn(true);
 
@@ -43,9 +46,20 @@ class AudioCallbackControllerTest {
     void invalidTokenRejectsWithoutCallingService() {
         AudioCallbackStartDTO dto = new AudioCallbackStartDTO();
         dto.setTaskId(10L);
+        dto.setAttempt(0);
 
         assertThatThrownBy(() -> controller.callbackStart(dto, request("wrong-token")))
                 .isInstanceOf(AuthenticationException.class);
+    }
+
+    @Test
+    void pythonCallbackAcceptsRequiredAudioSizeFieldName() throws Exception {
+        AudioCallbackFinishDTO dto = new ObjectMapper().readValue(
+                "{\"taskId\":10,\"attempt\":3,\"status\":2,\"resultUrl\":\"https://audio.example/10.mp3\",\"AudioSize\":512}",
+                AudioCallbackFinishDTO.class);
+
+        assertThat(dto.getAudioSize()).isEqualTo(512L);
+        assertThat(dto.getAttempt()).isEqualTo(3);
     }
 
     private static MockHttpServletRequest request(String token) {

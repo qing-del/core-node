@@ -40,6 +40,13 @@ class AuditReviewPolicyTest {
     }
 
     @Test
+    void mapsCancellationToEachLegacyRecordCode() {
+        assertEquals(AuditConstant.CANCEL, AuditReviewPolicy.cancelledStatus(AuditTargetType.NOTE));
+        assertEquals(AuditStatus.CANCELLED.getCode(), AuditReviewPolicy.cancelledStatus(AuditTargetType.TAG));
+        assertEquals(AuditStatus.CANCELLED.getCode(), AuditReviewPolicy.cancelledStatus(AuditTargetType.IMAGE));
+    }
+
+    @Test
     void keepsGenericAuditStatusTransitionMatrix() {
         assertTrue(AuditStatus.WAIT.canTransitionTo(AuditStatus.AUDITING));
         assertTrue(AuditStatus.REJECTED.canTransitionTo(AuditStatus.AUDITING));

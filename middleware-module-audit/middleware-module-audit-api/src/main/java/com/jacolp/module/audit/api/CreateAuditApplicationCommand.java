@@ -11,12 +11,17 @@ public record CreateAuditApplicationCommand(
         AuditTargetType targetType,
         Long targetId,
         Long applicantUserId,
-        String applyReason) {
+        String applyReason,
+        String targetName,
+        String targetUrl) {
 
     public CreateAuditApplicationCommand {
         targetType = Objects.requireNonNull(targetType, "targetType must not be null");
         targetId = requirePositiveId(targetId, "targetId");
         applicantUserId = requirePositiveId(applicantUserId, "applicantUserId");
+        if (targetName == null || targetName.isBlank()) {
+            throw new IllegalArgumentException("targetName must not be blank");
+        }
     }
 
     private static Long requirePositiveId(Long id, String fieldName) {

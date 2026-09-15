@@ -7,6 +7,7 @@ import com.jacolp.module.system.biz.application.dto.user.UserStorageHandlerDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -51,6 +52,10 @@ public interface UserMapper {
 
     /** 按增量更新用户已用存储量，CAS 失败时返回 0。 */
     int updateStorageById(@Param("updateUser") UserStorageHandlerDTO updateUser);
+
+    @Update("UPDATE sys_user SET used_storage_bytes = used_storage_bytes - #{amountBytes}, " +
+            "update_time = NOW() WHERE id = #{userId} AND used_storage_bytes >= #{amountBytes}")
+    int releaseStorageIfSufficient(@Param("userId") long userId, @Param("amountBytes") long amountBytes);
 
     /** 更新用户最大存储字节数。 */
     int updateMaxStorageById(Long id, Long maxStorageBytes);

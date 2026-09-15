@@ -3,6 +3,8 @@ package com.jacolp.module.system.biz.application.service.impl;
 import java.util.List;
 
 import com.jacolp.middleware.common.security.token.TokenSessionService;
+import com.jacolp.middleware.messaging.event.UserProfileChangedEvent;
+import com.jacolp.middleware.messaging.pulisher.UserProfileEventPublisher;
 import com.jacolp.module.system.biz.application.annotation.RequireValidRole;
 import com.jacolp.module.system.biz.application.dto.user.UserAddDTO;
 import com.jacolp.module.system.biz.application.dto.user.UserListDTO;
@@ -10,6 +12,7 @@ import com.jacolp.module.system.biz.application.dto.user.UserLoginDTO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.github.pagehelper.PageHelper;
@@ -41,6 +44,7 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     @Autowired private TokenSessionService tokenSessionService;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private UserProfileEventPublisher userProfileEvents;
 
     @Override
     public String loginAdmin(UserLoginDTO userLoginDTO) {
@@ -95,6 +99,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     // 修改用户时 roleId 可选：未传则不做角色存在性校验，传了才校验
     @RequireValidRole(required = false)
+    @Transactional(rollbackFor = Exception.class)
     public void modifyUser(UserModifyDTO dto) {
         log.info("Admin modifying user, target user id: {}", dto.getId());
 
@@ -129,12 +134,17 @@ public class AdminUserServiceImpl implements AdminUserService {
             }
         }
 
-        userMapper.updateById(user);
+        int affected = userMapper.updateById(user);
+        if (affected <= 0) {
+            throw new BaseException(UserConstant.UPDATE_USER_INFO_FAILED);
+        }
+        publishProfile(userMapper.selectById(dto.getId()));
     }
 
     @Override
     // 新增用户必须指定有效角色
     @RequireValidRole
+    @Transactional(rollbackFor = Exception.class)
     public void addUser(UserAddDTO dto) {
         log.info("Admin adding new user, username: {}, roleId: {}", dto.getUsername(), dto.getRoleId());
 
@@ -174,6 +184,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (rows != 1) {
             throw new BaseException("新增用户失败");
         }
+        publishProfile(user);
         log.info("User created successfully, username: {}", dto.getUsername());
     }
 
@@ -262,5 +273,13 @@ public class AdminUserServiceImpl implements AdminUserService {
         user.setId(userId);
         user.setUsedStorageBytes(usedStorageBytes);
         userMapper.updateById(user);
+    }
+
+    private void publishProfile(UserDO user) {
+        if (user == null) {
+            throw new BaseException(UserConstant.NOT_FOUND_USER);
+        }
+        userProfileEvents.publish(new UserProfileChangedEvent(
+                user.getId(), user.getUsername(), user.getNickname()));
     }
 }

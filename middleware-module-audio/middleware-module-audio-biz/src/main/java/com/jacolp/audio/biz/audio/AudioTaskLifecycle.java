@@ -7,7 +7,9 @@ public final class AudioTaskLifecycle {
         PENDING(0),
         PROCESSING(1),
         SUCCESS(2),
-        FAILED(-1);
+        FAILED(-1),
+        RETRIED(-2),
+        CANCELLED(-3);
 
         private final int code;
 
@@ -45,6 +47,14 @@ public final class AudioTaskLifecycle {
 
     public static boolean shouldSetCompletedDate(int status) {
         return status == Status.SUCCESS.code();
+    }
+
+    public static int cancelledStatus() {
+        return Status.CANCELLED.code();
+    }
+
+    public static boolean isCancellable(int status) {
+        return status == Status.PENDING.code() || status == Status.PROCESSING.code();
     }
 
     public static boolean canTransition(int currentStatus, int targetStatus) {

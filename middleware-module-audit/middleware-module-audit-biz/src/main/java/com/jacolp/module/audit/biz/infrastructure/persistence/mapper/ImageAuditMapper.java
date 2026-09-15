@@ -21,6 +21,7 @@ public interface ImageAuditMapper {
     List<ImageAuditRecordDO> selectPendingByIds(@Param("ids") List<Long> ids);
     ImageAuditRecordDO selectPendingByImageId(@Param("imageId") Long imageId);
     int batchReviewByIds(@Param("ids") List<Long> ids, @Param("status") Short status, @Param("reviewerUserId") Long reviewerUserId, @Param("rejectReason") String rejectReason);
-    @Update("UPDATE biz_image_audit_record SET status = 0, update_time = NOW() WHERE image_id = #{imageId} AND status = 1")
-    int deletePendingByImageId(@Param("imageId") Long imageId);
+    @Update("UPDATE biz_image_audit_record SET status = #{status}, update_time = NOW() " +
+            "WHERE image_id = #{imageId} AND status = 1")
+    int cancelPendingByImageId(@Param("imageId") Long imageId, @Param("status") Short status);
 }

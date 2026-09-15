@@ -17,6 +17,8 @@ public interface MetaAuditMapper {
     int insertAuditRecord(MetaAuditRecordDO record);
     @Select("SELECT COUNT(*) FROM biz_tag_audit_record WHERE target_id = #{targetId} AND status = 1")
     int countPendingAuditByApplyTypeAndTargetId(@Param("applyType") Short applyType, @Param("targetId") Long targetId);
-    @Update("UPDATE biz_tag_audit_record SET status = 0, update_time = NOW() WHERE target_id = #{targetId} AND status = 1")
-    int deletePendingByApplyTypeAndTargetId(@Param("applyType") Short applyType, @Param("targetId") Long targetId);
+    @Update("UPDATE biz_tag_audit_record SET status = #{status}, update_time = NOW() " +
+            "WHERE target_id = #{targetId} AND status = 1")
+    int cancelPendingByApplyTypeAndTargetId(@Param("applyType") Short applyType, @Param("targetId") Long targetId,
+                                             @Param("status") Short status);
 }

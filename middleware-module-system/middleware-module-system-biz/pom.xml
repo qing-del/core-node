@@ -9,6 +9,7 @@
         <dependency><groupId>com.jacolp</groupId><artifactId>middleware-module-note-api</artifactId></dependency>
         <dependency><groupId>com.jacolp</groupId><artifactId>middleware-module-media-api</artifactId></dependency>
         <dependency><groupId>com.jacolp</groupId><artifactId>middleware-common-core</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>middleware-common-messaging</artifactId></dependency>
         <dependency><groupId>com.jacolp</groupId><artifactId>middleware-common-security</artifactId></dependency>
         <dependency><groupId>com.jacolp</groupId><artifactId>middleware-common-web</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter</artifactId></dependency>

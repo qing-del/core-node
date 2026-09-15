@@ -14,6 +14,7 @@ import com.jacolp.module.audit.biz.infrastructure.persistence.dataobject.NoteAud
 import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.ImageAuditMapper;
 import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.MetaAuditMapper;
 import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.NoteAuditMapper;
+import com.jacolp.module.audit.biz.infrastructure.persistence.mapper.AuditQueryProjectionMapper;
 import com.jacolp.module.audit.biz.domain.audit.AuditReviewPolicy;
 import java.util.Objects;
 
@@ -26,12 +27,14 @@ public class AuditApplicationApiService implements AuditApplicationApi {
     private final MetaAuditMapper metaAuditMapper;
     private final ImageAuditMapper imageAuditMapper;
     private final NoteAuditMapper noteAuditMapper;
+    private final AuditQueryProjectionMapper projections;
 
     public AuditApplicationApiService(MetaAuditMapper metaAuditMapper, ImageAuditMapper imageAuditMapper,
-                                      NoteAuditMapper noteAuditMapper) {
+                                      NoteAuditMapper noteAuditMapper, AuditQueryProjectionMapper projections) {
         this.metaAuditMapper = metaAuditMapper;
         this.imageAuditMapper = imageAuditMapper;
         this.noteAuditMapper = noteAuditMapper;
+        this.projections = projections;
     }
 
     @Override
@@ -45,6 +48,9 @@ public class AuditApplicationApiService implements AuditApplicationApi {
 
     @Override
     public AuditApplicationResult createApplication(CreateAuditApplicationCommand command) {
+        if (hasPendingApplication(new PendingAuditApplicationQuery(command.targetType(), command.targetId()))) {
+            throw new BaseException("该对象已有待审核的申请");
+        }
         return switch (command.targetType()) {
             case TAG -> createTagApplication(command);
             case IMAGE -> createImageApplication(command);
@@ -92,22 +98,27 @@ public class AuditApplicationApiService implements AuditApplicationApi {
     private CancelAuditApplicationResult cancelTagApplication(CancelAuditApplicationCommand command) {
         MetaAuditRecordDO record = metaAuditMapper.selectPendingByApplyTypeAndTargetId(TAG_APPLY_TYPE, command.targetId());
         ensurePendingApplicant(record == null ? null : record.getApplicantUserId(), record == null ? null : record.getStatus(), AuditTargetType.TAG, command.actorUserId());
-        return cancelledResult(command, metaAuditMapper.deletePendingByApplyTypeAndTargetId(TAG_APPLY_TYPE, command.targetId()));
+        return cancelledResult(command, metaAuditMapper.cancelPendingByApplyTypeAndTargetId(TAG_APPLY_TYPE,
+                command.targetId(), AuditReviewPolicy.cancelledStatus(AuditTargetType.TAG)));
     }
 
     private CancelAuditApplicationResult cancelImageApplication(CancelAuditApplicationCommand command) {
         ImageAuditRecordDO record = imageAuditMapper.selectPendingByImageId(command.targetId());
         ensurePendingApplicant(record == null ? null : record.getApplicantUserId(), record == null ? null : record.getStatus(), AuditTargetType.IMAGE, command.actorUserId());
-        return cancelledResult(command, imageAuditMapper.deletePendingByImageId(command.targetId()));
+        return cancelledResult(command, imageAuditMapper.cancelPendingByImageId(command.targetId(),
+                AuditReviewPolicy.cancelledStatus(AuditTargetType.IMAGE)));
     }
 
     private CancelAuditApplicationResult cancelNoteApplication(CancelAuditApplicationCommand command) {
         NoteAuditRecordDO record = noteAuditMapper.selectPendingByNoteId(command.targetId());
         ensurePendingApplicant(record == null ? null : record.getApplicantUserId(), record == null ? null : record.getStatus(), AuditTargetType.NOTE, command.actorUserId());
-        return cancelledResult(command, noteAuditMapper.deletePendingByNoteId(command.targetId()));
+        return cancelledResult(command, noteAuditMapper.cancelPendingByNoteId(command.targetId(),
+                AuditReviewPolicy.cancelledStatus(AuditTargetType.NOTE)));
     }
 
-    private static AuditApplicationResult createdResult(CreateAuditApplicationCommand command, Long auditApplicationId) {
+    private AuditApplicationResult createdResult(CreateAuditApplicationCommand command, Long auditApplicationId) {
+        projections.upsertRecord(command.targetType().name(), auditApplicationId, command.targetId(),
+                projections.selectUsername(command.applicantUserId()), command.targetName(), command.targetUrl());
         return new AuditApplicationResult(auditApplicationId, command.targetType(), command.targetId(), command.applicantUserId());
     }
 

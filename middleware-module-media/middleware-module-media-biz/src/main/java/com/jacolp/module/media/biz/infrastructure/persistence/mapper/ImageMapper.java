@@ -5,6 +5,7 @@ import com.jacolp.module.media.biz.infrastructure.persistence.dataobject.ImageDO
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -21,6 +22,10 @@ public interface ImageMapper {
     List<ImageVO> listByCondition(ImageDO query);
     int deleteByIds(@Param("ids") List<Long> ids);
     int updateAuditStatusByIds(@Param("ids") List<Long> ids, @Param("auditStatus") Short auditStatus);
+    @Update("UPDATE biz_image SET audit_status = #{newStatus} " +
+            "WHERE id = #{id} AND audit_status = #{expectedStatus}")
+    int updateAuditStatusIfCurrent(@Param("id") Long id, @Param("expectedStatus") Short expectedStatus,
+                                   @Param("newStatus") Short newStatus);
 
     @Select("SELECT IFNULL(SUM(file_size), 0) FROM biz_image WHERE user_id = #{userId} AND audit_status != 4")
     Long sumImageFileSizeByUserId(@Param("userId") Long userId);

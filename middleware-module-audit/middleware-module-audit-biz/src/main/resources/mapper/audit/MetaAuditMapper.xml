@@ -38,16 +38,21 @@
         SELECT
             a.id,
             a.applicant_user_id,
+            snapshot.applicant_username,
             2 AS apply_type,
             a.target_id,
+            snapshot.target_name,
             a.apply_reason,
             a.status,
             a.reviewer_user_id,
+            snapshot.reviewer_username,
             a.reject_reason,
             a.create_time,
             a.review_time,
             a.update_time
         FROM biz_tag_audit_record a
+        LEFT JOIN audit_query_record_projection snapshot
+               ON snapshot.target_type = 'TAG' AND snapshot.audit_id = a.id
         <where>
             <if test="status != null">
                 a.status = #{status}

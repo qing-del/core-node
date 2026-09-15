@@ -23,28 +23,28 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 public class SecurityFilterConfiguration {
 
     @Bean
-    LegacyJwtAuthenticationFilter adminJwtAuthenticationFilter(
+    public LegacyJwtAuthenticationFilter adminJwtAuthenticationFilter(
             ObjectProvider<RequestMappingHandlerMapping> handlerMappingProvider, StringRedisTemplate redis,
             JwtProperties jwtProperties, QpsCounter qpsCounter) {
         return new LegacyJwtAuthenticationFilter(SecurityIdentity.ADMIN, handlerMappingProvider, redis, jwtProperties, qpsCounter);
     }
 
     @Bean
-    LegacyJwtAuthenticationFilter userJwtAuthenticationFilter(
+    public LegacyJwtAuthenticationFilter userJwtAuthenticationFilter(
             ObjectProvider<RequestMappingHandlerMapping> handlerMappingProvider, StringRedisTemplate redis,
             JwtProperties jwtProperties, QpsCounter qpsCounter) {
         return new LegacyJwtAuthenticationFilter(SecurityIdentity.USER, handlerMappingProvider, redis, jwtProperties, qpsCounter);
     }
 
     @Bean
-    LegacyJwtAuthenticationFilter activationJwtAuthenticationFilter(
+    public LegacyJwtAuthenticationFilter activationJwtAuthenticationFilter(
             ObjectProvider<RequestMappingHandlerMapping> handlerMappingProvider, StringRedisTemplate redis,
             JwtProperties jwtProperties, QpsCounter qpsCounter) {
         return new LegacyJwtAuthenticationFilter(SecurityIdentity.ACTIVATION, handlerMappingProvider, redis, jwtProperties, qpsCounter);
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http,
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                             LegacyJwtAuthenticationFilter adminJwtAuthenticationFilter,
                                             LegacyJwtAuthenticationFilter userJwtAuthenticationFilter,
                                             LegacyJwtAuthenticationFilter activationJwtAuthenticationFilter) throws Exception {
@@ -62,17 +62,17 @@ public class SecurityFilterConfiguration {
     }
 
     @Bean
-    FilterRegistrationBean<Filter> disableAdminFilterRegistration(LegacyJwtAuthenticationFilter adminJwtAuthenticationFilter) {
+    public FilterRegistrationBean<Filter> disableAdminFilterRegistration(LegacyJwtAuthenticationFilter adminJwtAuthenticationFilter) {
         return disabledRegistration(adminJwtAuthenticationFilter);
     }
 
     @Bean
-    FilterRegistrationBean<Filter> disableUserFilterRegistration(LegacyJwtAuthenticationFilter userJwtAuthenticationFilter) {
+    public FilterRegistrationBean<Filter> disableUserFilterRegistration(LegacyJwtAuthenticationFilter userJwtAuthenticationFilter) {
         return disabledRegistration(userJwtAuthenticationFilter);
     }
 
     @Bean
-    FilterRegistrationBean<Filter> disableActivationFilterRegistration(LegacyJwtAuthenticationFilter activationJwtAuthenticationFilter) {
+    public FilterRegistrationBean<Filter> disableActivationFilterRegistration(LegacyJwtAuthenticationFilter activationJwtAuthenticationFilter) {
         return disabledRegistration(activationJwtAuthenticationFilter);
     }
 

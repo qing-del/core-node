@@ -13,6 +13,7 @@
     <packaging>pom</packaging>
     <modules>
         <module>middleware-common-core</module>
+        <module>middleware-common-messaging</module>
         <module>middleware-common-security</module>
         <module>middleware-common-web</module>
     </modules>

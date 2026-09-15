@@ -7,6 +7,7 @@ import com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteDO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import com.jacolp.module.note.biz.application.vo.note.NoteSimpleVO;
 import com.jacolp.module.note.biz.application.vo.note.NoteVO;
@@ -35,6 +36,10 @@ public interface NoteMapper {
     int softDeleteByIds(@Param("ids") List<Long> ids);
     int updateStatus(@Param("id") Long id, @Param("status") Short status);
     int updateStatusByIds(@Param("ids") List<Long> ids, @Param("status") Short status);
+    @Update("UPDATE biz_note SET status = #{newStatus}, update_time = NOW() " +
+            "WHERE id = #{id} AND status = #{expectedStatus}")
+    int updateStatusIfCurrent(@Param("id") Long id, @Param("expectedStatus") Short expectedStatus,
+                              @Param("newStatus") Short newStatus);
     int updateMissingInfoFields(@Param("id") Long id, @Param("missingInfoMask") Integer mask,
                                 @Param("missingCount") Integer count);
     int updateMissingCount(@Param("id") Long id, @Param("missingCount") Integer count);

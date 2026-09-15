@@ -27,6 +27,10 @@ public final class AuditReviewPolicy {
                 : AuditStatus.AUDITING.getCode();
     }
 
+    public static Short cancelledStatus(AuditTargetType targetType) {
+        return targetType == AuditTargetType.NOTE ? AuditConstant.CANCEL : AuditStatus.CANCELLED.getCode();
+    }
+
     public static boolean isPending(AuditTargetType targetType, Short status) {
         return Objects.equals(pendingStatus(targetType), status);
     }

@@ -38,6 +38,8 @@ public class ImageConstant {
     // ============= 图片删除死信队列常量 =============
     public static final short IMAGE_DELETE_DEAD_LETTER_STATUS_WAITING = 0;    // 等待处理
     public static final short IMAGE_DELETE_DEAD_LETTER_STATUS_COMPLETED = 1;  // 处理完成
+    public static final short IMAGE_DELETE_DEAD_LETTER_STATUS_QUEUED = 2;     // 已写入可靠消息队列
+    public static final short IMAGE_DELETE_DEAD_LETTER_STATUS_FAILED = 3;     // 重试耗尽，等待人工处理
 
     public static final String FAILED_TO_INSERT_IMAGE_DELETE_DEAD_LETTER = "图片删除死信队列插入失败";
 

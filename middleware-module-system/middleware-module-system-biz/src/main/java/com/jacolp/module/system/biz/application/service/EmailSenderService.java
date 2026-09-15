@@ -5,24 +5,12 @@ import com.jacolp.module.system.biz.application.dto.email.EmailResultDTO;
 import com.jacolp.module.system.biz.infrastructure.persistence.dataobject.UserDO;
 
 public interface EmailSenderService {
-    /**
-     * 发送激活邮件，返回生成的 token 供调试
-     * <p>- 此接口没有设置速率限制</p>
-     */
+    /** Queues an activation email in the current database transaction. */
     String sendActivationEmail(UserDO user);
 
-    /** 管理员发送自定义邮件 */
+    /** Queues one independently retryable custom-email command per recipient. */
     EmailResultDTO sendCustomEmail(EmailSendDTO dto);
 
-    /**
-     * 底层发送 HTML 邮件
-     * <p>- 此接口没有设置速率限制</p>
-     */
-    void sendHtmlMail(String to, String subject, String htmlContent);
-
-    /**
-     * 发送邮箱更改验证码到新邮箱
-     * <p>- 此接口没有设置速率限制</p>
-     */
+    /** Queues an email-change verification message in the current transaction. */
     void sendEmailChangeCode(UserDO user, String newEmail);
 }

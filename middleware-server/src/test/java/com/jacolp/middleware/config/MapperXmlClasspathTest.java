@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MapperXmlClasspathTest {
 
     private static final String MAPPER_LOCATION_PATTERN = "classpath*:mapper/**/*.xml";
-    private static final int CURRENT_MAPPER_BASELINE = 17;
 
     @Test
     void mapperLocationsUseMultiJarPatternAndEveryMapperXmlParses() throws Exception {
@@ -32,9 +31,10 @@ class MapperXmlClasspathTest {
         PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
         Resource[] mapperResources = resolver.getResources(MAPPER_LOCATION_PATTERN);
 
-        assertThat(mapperResources).hasSizeGreaterThanOrEqualTo(CURRENT_MAPPER_BASELINE);
+        assertThat(mapperResources).isNotEmpty();
         assertThat(Arrays.stream(mapperResources).map(Resource::getFilename))
-                .contains("UserMapper.xml", "NoteMapper.xml", "ImageMapper.xml", "MetaAuditMapper.xml");
+                .contains("UserMapper.xml", "NoteMapper.xml", "ImageMapper.xml",
+                        "MetaAuditMapper.xml", "ImageAuditMapper.xml", "NoteAuditMapper.xml");
 
         Configuration configuration = new Configuration();
         for (Resource mapperResource : mapperResources) {

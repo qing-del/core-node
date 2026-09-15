@@ -12,6 +12,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface NoteImageMappingMapper {
@@ -69,6 +70,9 @@ public interface NoteImageMappingMapper {
 
     int updateByImageIds(@Param("imageIds") List<Long> imageIds,
                          @Param("status") Short status);
+    @Update("UPDATE biz_note_image_mapping SET status = #{status}, update_time = NOW() " +
+            "WHERE image_id = #{imageId} AND is_deleted = 0")
+    int updateActiveByImageId(@Param("imageId") Long imageId, @Param("status") Short status);
 
     /**
      * 统计指定笔记的未绑定图片数量

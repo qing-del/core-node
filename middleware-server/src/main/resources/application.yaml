@@ -29,6 +29,16 @@ spring:
           max-idle: 8
           min-idle: 0
           max-wait: 100ms
+  rabbitmq:
+    host: ${RABBITMQ_HOST:${jacolp.rabbitmq.host}}
+    port: ${RABBITMQ_PORT:${jacolp.rabbitmq.port}}
+    username: ${RABBITMQ_USERNAME:${jacolp.rabbitmq.username}}
+    password: ${RABBITMQ_PASSWORD:${jacolp.rabbitmq.password}}
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        default-requeue-rejected: false
+        missing-queues-fatal: false
   mail:
     host: ${jacolp.mail.host}
     port: ${jacolp.mail.port}
@@ -44,7 +54,30 @@ spring:
             port: 465
             class: javax.net.ssl.SSLSocketFactory
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
 jacolp:
+  messaging:
+    enabled: ${MESSAGING_ENABLED:true}
+    batch-size: ${MESSAGING_OUTBOX_BATCH_SIZE:100}
+    shard-size: ${MESSAGING_SHARD_SIZE:100}
+    max-retries: ${MESSAGING_MAX_RETRIES:8}
+    poll-delay-ms: ${MESSAGING_POLL_DELAY_MS:1000}
+    claim-seconds: ${MESSAGING_CLAIM_SECONDS:60}
+    confirm-timeout-ms: ${MESSAGING_CONFIRM_TIMEOUT_MS:10000}
+    retry-queue-delay-ms: ${MESSAGING_RETRY_DELAY_MS:10000}
+    max-payload-bytes: ${MESSAGING_MAX_PAYLOAD_BYTES:262144}
+    initial-backoff: ${MESSAGING_INITIAL_BACKOFF:2s}
+    max-backoff: ${MESSAGING_MAX_BACKOFF:5m}
   admin:
     username: ${jacolp.admin.username}
     password: ${jacolp.admin.password}
@@ -69,9 +102,11 @@ jacolp:
   aliyun:
     oss:
       keep-live-time: 45  # 单位是秒
+      keep-live-enabled: ${OSS_KEEP_LIVE_ENABLED:false}
       enabled: true
   audio:
     callback-token: ${jacolp.audio.callback-token}
+    queue-type: ${AUDIO_QUEUE_TYPE:redis-stream}
   image:
     delete-image-task-time: 60 # 单位是分钟
 

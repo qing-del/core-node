@@ -1,6 +1,5 @@
 package com.jacolp.module.media.biz.infrastructure.persistence.dataobject;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -10,14 +9,17 @@ import java.time.LocalDateTime;
 /** Persistence model for {@code biz_image_delete_dead_letter}. */
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 public class ImageDeleteDeadLetterDO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private Long id;
+    private String resourceId;
     private String imageUrl;
+    private String eventId;
     private Short status;
     private Integer retryCount;
+    private String lastError;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+    private LocalDateTime completedTime;
 }

@@ -6,6 +6,7 @@ import com.jacolp.module.note.biz.infrastructure.persistence.dataobject.NoteEach
 import com.jacolp.module.note.biz.infrastructure.persistence.projection.MappingProjections;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 
 @Mapper
@@ -53,6 +54,9 @@ public interface NoteEachMappingMapper {
 
     int updateBySourceNoteIds(@Param("sourceNoteIds") List<Long> sourceNoteIds,
                               @Param("status") Short status);
+    @Update("UPDATE biz_note_each_mapping SET status = #{status}, update_time = NOW() " +
+            "WHERE target_note_id = #{noteId} AND is_deleted = 0")
+    int updateActiveByTargetNoteId(@Param("noteId") Long noteId, @Param("status") Short status);
 
     /**
      * 统计指定笔记的未绑定内联笔记数量

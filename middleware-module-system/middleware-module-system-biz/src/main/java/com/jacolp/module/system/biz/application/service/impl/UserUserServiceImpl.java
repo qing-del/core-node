@@ -17,6 +17,9 @@ import com.jacolp.module.system.biz.infrastructure.persistence.dataobject.UserDO
 import com.jacolp.module.system.biz.application.vo.user.UserDetailVO;
 import com.jacolp.module.system.biz.application.vo.user.UserOverviewVO;
 import com.jacolp.middleware.common.security.token.TokenSessionService;
+import com.jacolp.middleware.messaging.event.UserProfileChangedEvent;
+import com.jacolp.middleware.messaging.pulisher.UserProfileEventPublisher;
+import com.jacolp.module.system.biz.application.service.EmailSenderService;
 import com.jacolp.module.system.biz.application.service.UserUserService;
 import com.jacolp.utils.EmailUtil;
 import jakarta.validation.Valid;
@@ -25,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 
@@ -36,7 +40,8 @@ public class UserUserServiceImpl implements UserUserService {
 
     @Autowired private TokenSessionService tokenSessionService;
     @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private EmailSenderServiceImpl emailSenderService;
+    @Autowired private EmailSenderService emailSenderService;
+    @Autowired private UserProfileEventPublisher userProfileEvents;
 
     @Override
     public String loginUser(@NotNull @Valid UserLoginDTO userLoginDTO) {
@@ -76,6 +81,7 @@ public class UserUserServiceImpl implements UserUserService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public String register(@NotNull @Valid UserRegisterDTO userRegisterDTO) {
         // 校验两次密码一致性
         if (!userRegisterDTO.getPassword().equals(userRegisterDTO.getConfirmPassword())) {
@@ -104,12 +110,8 @@ public class UserUserServiceImpl implements UserUserService {
             throw new BaseException("注册失败");
         }
 
-        try {
-            sendActivationEmail(user.getId());
-        } catch (Exception e) {
-            log.error("Failed to send activation email, userId: {}, email: {}", user.getId(), user.getEmail(), e);
-            return "注册成功，账号待邮箱激活；" + UserConstant.ACTIVATION_EMAIL_SEND_FAILED;
-        }
+        publishProfile(user);
+        sendActivationEmail(user.getId());
         return "注册成功，请查收邮箱激活账号";
     }
 
@@ -174,6 +176,7 @@ public class UserUserServiceImpl implements UserUserService {
 
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateCurrentUserProfile(@NotNull @Valid UserProfileUpdateDTO dto) {
         Long userId = BaseContext.getCurrentId();
         UserDO user = userMapper.selectById(userId);
@@ -211,7 +214,13 @@ public class UserUserServiceImpl implements UserUserService {
             log.error("User profile update failed, userId: {}", userId);
             throw new BaseException(UserConstant.UPDATE_USER_INFO_FAILED);
         }
+        publishProfile(user);
         log.info("User profile updated, userId: {}", userId);
+    }
+
+    private void publishProfile(UserDO user) {
+        userProfileEvents.publish(new UserProfileChangedEvent(
+                user.getId(), user.getUsername(), user.getNickname()));
     }
 
     /**
@@ -252,12 +261,14 @@ public class UserUserServiceImpl implements UserUserService {
      * @param userId 用户ID
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void sendActivationEmail(Long userId) {
         UserDO user = userMapper.selectById(userId);
         sendActivationEmail(user);
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void sendActivationEmailByAccount(String account) {
         if (!StringUtils.hasText(account)) {
             throw new BaseException("用户名或邮箱不能为空");
@@ -305,7 +316,7 @@ public class UserUserServiceImpl implements UserUserService {
 
         // 校验邮箱格式
         if (!EmailUtil.isValidEmail(user.getEmail())) {
-            log.error("Invalid email format, userId: {}, email: {}", user.getId(), user.getEmail());
+            log.error("Invalid email format for userId: {}", user.getId());
             throw new BaseException(UserConstant.INVALID_EMAIL_FORMAT);
         }
 
@@ -331,6 +342,7 @@ public class UserUserServiceImpl implements UserUserService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void initiateEmailChange(@NotNull @Valid EmailChangeRequestDTO dto) {
         Long userId = BaseContext.getCurrentId();
         UserDO user = userMapper.selectById(userId);
@@ -362,7 +374,7 @@ public class UserUserServiceImpl implements UserUserService {
             // 发送修改邮箱的 6 位验证码邮件
             emailSenderService.sendEmailChangeCode(user, dto.getNewEmail());
         } catch (Exception e) {
-            log.error("Failed to send email change code to {}: {}", dto.getNewEmail(), e.getMessage());
+            log.error("Failed to queue email change code for userId: {}", userId, e);
             throw new BaseException(UserConstant.EMAIL_CHANGE_SEND_FAILED);
         }
     }
@@ -392,7 +404,7 @@ public class UserUserServiceImpl implements UserUserService {
         }
 
         tokenSessionService.deleteEmailChangeCode(code);
-        log.info("Email changed successfully, userId: {}, newEmail: {}", userId, newEmail);
+        log.info("Email changed successfully for userId: {}", userId);
         return "邮箱修改成功";
     }
 }

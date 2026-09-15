@@ -12,7 +12,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.jacolp.context.NoteImageResolveContext;
 import com.jacolp.context.PermissionContext;
-import com.jacolp.module.system.api.quota.StorageUpdateContext;
 import com.jacolp.exception.BaseException;
 import com.jacolp.module.note.biz.application.dto.note.NoteChangeConfirmDTO;
 
@@ -90,10 +89,10 @@ public interface NoteFacade {
      *
      * <ol>
      *   <li>校验笔记存在且不处于审核中/已公开状态</li>
-     *   <li>汇总用户的文件大小（供 {@code @StorageHandler} 回收配额）</li>
+     *   <li>记录每个资源的存储释放事实</li>
      *   <li>依次清理转换结果 → Diff 记录 → 文本内容 → 三类映射</li>
      *   <li>笔记行状态标记为 DELETED（软删除）</li>
-     *   <li>通过 {@link StorageUpdateContext} 传递存储回收信息给切面 - 进入了该方法就一定要清除 StorageUpdateContext 中的内容</li>
+     *   <li>与软删除同事务写入存储释放事件</li>
      * </ol>
      */
     void deleteNote(Long noteId);

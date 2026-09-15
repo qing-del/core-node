@@ -7,6 +7,7 @@ import com.jacolp.module.note.biz.infrastructure.persistence.dataobject.TagDO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import com.jacolp.module.note.biz.application.vo.tag.TagVO;
 
@@ -45,6 +46,10 @@ public interface TagMapper {
 
     int updateAuditStatusByIds(@Param("ids") List<Long> ids,
                                @Param("auditStatus") Short auditStatus);
+    @Update("UPDATE biz_tag SET audit_status = #{newStatus} " +
+            "WHERE id = #{id} AND audit_status = #{expectedStatus}")
+    int updateAuditStatusIfCurrent(@Param("id") Long id, @Param("expectedStatus") Short expectedStatus,
+                                   @Param("newStatus") Short newStatus);
 
     /**
      * 根据条件查询标签

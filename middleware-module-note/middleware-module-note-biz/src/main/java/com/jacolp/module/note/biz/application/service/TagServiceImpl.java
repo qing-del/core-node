@@ -12,7 +12,6 @@ import com.jacolp.module.audit.api.AuditApplicationApi;
 import com.jacolp.module.audit.api.AuditTargetType;
 import com.jacolp.module.audit.api.CancelAuditApplicationCommand;
 import com.jacolp.module.audit.api.CreateAuditApplicationCommand;
-import com.jacolp.module.audit.api.PendingAuditApplicationQuery;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -55,7 +54,7 @@ public class TagServiceImpl implements TagService {
     @Autowired private TagMapper tagMapper;
 
     // 来自其他模块的 Mapper
-    @Autowired private AuditApplicationApi auditApplicationApi;
+    @Autowired private AuditApplicationApi auditApi;
     @Autowired private NoteCoreService noteCoreService;
     @Autowired private NoteRelationService noteRelationService;
 
@@ -235,6 +234,7 @@ public class TagServiceImpl implements TagService {
      * 用户端发起标签审核申请。
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void submitTagAudit(Long tagId) {
         Long userId = BaseContext.getCurrentId();
         validateTagId(tagId);
@@ -247,20 +247,19 @@ public class TagServiceImpl implements TagService {
         if (!status.canTransitionTo(AuditStatus.AUDITING)) {
             throw new BaseException("该标签已通过审核");
         }
-        if (auditApplicationApi.hasPendingApplication(new PendingAuditApplicationQuery(AuditTargetType.TAG, tagId))) {
+        if (tagMapper.updateAuditStatusIfCurrent(tagId, status.getCode(), AuditStatus.AUDITING.getCode()) != 1) {
             throw new BaseException("该标签已有待审核的申请");
         }
+        auditApi.createApplication(new CreateAuditApplicationCommand(AuditTargetType.TAG, tagId, userId,
+                null, tag.getTagName(), null));
 
-        auditApplicationApi.createApplication(new CreateAuditApplicationCommand(
-                AuditTargetType.TAG, tagId, userId, null));
-
-        tagMapper.updateAuditStatusByIds(List.of(tagId), AuditStatus.AUDITING.getCode());
     }
 
     /**
      * 用户端撤销标签审核申请。
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void cancelTagAudit(Long tagId) {
         Long userId = BaseContext.getCurrentId();
         validateTagId(tagId);
@@ -274,9 +273,11 @@ public class TagServiceImpl implements TagService {
             throw new BaseException("该标签未处于审核中");
         }
 
-        auditApplicationApi.cancelApplication(new CancelAuditApplicationCommand(
-                AuditTargetType.TAG, tagId, userId));
-        tagMapper.updateAuditStatusByIds(List.of(tagId), AuditStatus.WAIT.getCode());
+        auditApi.cancelApplication(new CancelAuditApplicationCommand(AuditTargetType.TAG, tagId, userId));
+        if (tagMapper.updateAuditStatusIfCurrent(tagId, AuditStatus.AUDITING.getCode(),
+                AuditStatus.WAIT.getCode()) != 1) {
+            throw new BaseException("该标签已有处理中的审核命令");
+        }
     }
 
     /**

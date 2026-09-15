@@ -23,7 +23,7 @@ public class EmailController {
 
     @PostMapping("/send")
     @Operation(summary = "发送自定义邮件",
-            description = "管理员可指定单个用户或按角色群发，邮件内容可以为纯文本或 HTML")
+            description = "管理员可指定单个用户或按角色异步群发；返回值表示已可靠入队数量")
     public Result<EmailResultDTO> sendEmail(@RequestBody @Valid EmailSendDTO dto) {
         log.info("Admin send custom email, userId: {}, roleId: {}", dto.getUserId(), dto.getRoleId());
         return Result.success(emailSenderService.sendCustomEmail(dto));

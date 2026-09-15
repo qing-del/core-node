@@ -5,6 +5,7 @@ import com.jacolp.module.system.api.quota.ConsumeQuotaCommand;
 import com.jacolp.module.system.api.quota.ConsumeQuotaResult;
 import com.jacolp.module.system.biz.application.api.UserProfileApiService;
 import com.jacolp.module.system.biz.application.api.UserQuotaApiService;
+import com.jacolp.module.system.biz.application.dto.user.UserQuoteStorageDTO;
 import com.jacolp.module.system.biz.infrastructure.persistence.dataobject.ApiDailyUsageDO;
 import com.jacolp.module.system.biz.infrastructure.persistence.dataobject.UserDO;
 import com.jacolp.module.system.biz.infrastructure.persistence.mapper.ApiDailyUsageMapper;
@@ -18,6 +19,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -66,5 +68,30 @@ class UserApiServiceTest {
         assertEquals(3L, result.quota().used());
         verify(usageMapper).incrementUsageBy(7L, date, 2L);
         verify(usageMapper, times(2)).selectByUserIdAndDate(eq(7L), eq(date));
+    }
+
+    @Test
+    void storageReleaseUsesAnAtomicUnderflowGuard() {
+        UserMapper userMapper = mock(UserMapper.class);
+        ApiDailyUsageMapper usageMapper = mock(ApiDailyUsageMapper.class);
+        when(userMapper.releaseStorageIfSufficient(7L, 512L)).thenReturn(1);
+
+        new UserQuotaApiService(userMapper, usageMapper).releaseStorage(7L, 512L);
+
+        verify(userMapper).releaseStorageIfSufficient(7L, 512L);
+    }
+
+    @Test
+    void storageReleaseRejectsHistoricalUnderflowForRetry() {
+        UserMapper userMapper = mock(UserMapper.class);
+        ApiDailyUsageMapper usageMapper = mock(ApiDailyUsageMapper.class);
+        UserQuoteStorageDTO storage = new UserQuoteStorageDTO();
+        storage.setUsedStorageBytes(128L);
+        storage.setMaxStorageBytes(1024L);
+        when(userMapper.releaseStorageIfSufficient(7L, 512L)).thenReturn(0);
+        when(userMapper.selectQuoteStorageById(7L)).thenReturn(storage);
+
+        assertThrows(IllegalStateException.class,
+                () -> new UserQuotaApiService(userMapper, usageMapper).releaseStorage(7L, 512L));
     }
 }

@@ -285,8 +285,10 @@ CREATE TABLE `audio_tasks` (
                                `speed`          decimal(3,2)  NOT NULL COMMENT '语速倍率(0.50~3.00)',
                                `noise_type`     varchar(32)   NOT NULL COMMENT '背景音枚举(PURE/WHITE_NOISE/PINK_NOISE/BROWN_NOISE/CAFE/AIRPORT/SUBWAY)',
                                `noise_factor`   decimal(3,2)  NOT NULL DEFAULT 0.50 COMMENT '背景音量因子(0.00~2.00, 默认0.50)',
-                               `status`         tinyint       NOT NULL DEFAULT 0 COMMENT '状态: 0-待处理(PENDING), 1-处理中(PROCESSING), 2-成功(SUCCESS), -1-失败(FAILED)',
+                               `status`         tinyint       NOT NULL DEFAULT 0 COMMENT '状态: 0-待处理(PENDING), 1-处理中(PROCESSING), 2-成功(SUCCESS), -1-失败(FAILED), -2-已重试(RETRIED), -3-已取消(CANCELLED)',
+                               `retry_time`     int           NOT NULL DEFAULT 0 COMMENT '超时重试次数',
                                `result_url`     varchar(255)  DEFAULT NULL COMMENT '成功后音频下载链接',
+                               `audio_size`     bigint        DEFAULT NULL COMMENT '成功后音频文件大小（字节）',
                                `error_msg`      varchar(500)  DEFAULT NULL COMMENT '失败时的错误信息',
                                `create_time`    datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '任务创建时间',
                                `update_time`    datetime      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '状态最后更新时间',
@@ -367,13 +369,102 @@ CREATE TABLE `biz_note_audit_record` (
 -- 用于记录需要异步重试删除的图片URL
 -- status: 0=等待删除, 1=删除完成
 -- ==========================================
+-- Reliable domain event Outbox / Inbox
+CREATE TABLE `sys_event_outbox` (
+    `id`              bigint       NOT NULL AUTO_INCREMENT,
+    `event_id`        varchar(64)  NOT NULL,
+    `event_type`      varchar(128) NOT NULL,
+    `routing_key`     varchar(128) NOT NULL,
+    `payload`         longtext     NOT NULL,
+    `status`          varchar(16)  NOT NULL DEFAULT 'PENDING',
+    `retry_count`     int          NOT NULL DEFAULT 0,
+    `next_retry_time` datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `last_error`      varchar(2000) DEFAULT NULL,
+    `claimed_by`      varchar(64)  DEFAULT NULL,
+    `claim_until`     datetime(3)  DEFAULT NULL,
+    `create_time`     datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `published_time`  datetime(3)  DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_event_outbox_event_id` (`event_id`),
+    KEY `idx_event_outbox_ready` (`status`, `next_retry_time`, `id`),
+    KEY `idx_event_outbox_claim` (`status`, `claim_until`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Transactional domain event outbox';
+
+CREATE TABLE `sys_event_inbox` (
+    `id`            bigint       NOT NULL AUTO_INCREMENT,
+    `event_id`      varchar(64)  NOT NULL,
+    `consumer_name` varchar(128) NOT NULL,
+    `event_type`    varchar(128) NOT NULL,
+    `status`        varchar(16)  NOT NULL,
+    `last_error`    varchar(2000) DEFAULT NULL,
+    `create_time`   datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `consumed_time` datetime(3)  DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_event_inbox_consumer` (`event_id`, `consumer_name`),
+    KEY `idx_event_inbox_consumer_time` (`consumer_name`, `consumed_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Idempotent domain event consumption records';
+
+CREATE TABLE `sys_event_projection_version` (
+    `id`             bigint       NOT NULL AUTO_INCREMENT,
+    `consumer_name`  varchar(128) NOT NULL,
+    `aggregate_type` varchar(64)  NOT NULL,
+    `aggregate_id`   bigint       NOT NULL,
+    `last_sequence`  bigint       NOT NULL,
+    `update_time`    datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_event_projection_aggregate`
+        (`consumer_name`, `aggregate_type`, `aggregate_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Last applied sequence for ordered event projections';
+
+CREATE TABLE `sys_async_command_state` (
+    `id`             bigint       NOT NULL AUTO_INCREMENT,
+    `owner_module`   varchar(32)  NOT NULL,
+    `aggregate_type` varchar(64)  NOT NULL,
+    `aggregate_id`   bigint       NOT NULL,
+    `command_id`     varchar(64)  NOT NULL,
+    `command_type`   varchar(64)  NOT NULL,
+    `state`          varchar(16)  NOT NULL,
+    `update_time`    datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_async_command_aggregate` (`owner_module`, `aggregate_type`, `aggregate_id`),
+    KEY `idx_async_command_id` (`command_id`),
+    KEY `idx_async_command_state_time` (`state`, `update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Current asynchronous command correlation state';
+
+CREATE TABLE `audit_query_user_projection` (
+    `user_id`     bigint       NOT NULL,
+    `username`    varchar(128) NOT NULL,
+    `nickname`    varchar(128) DEFAULT NULL,
+    `update_time` datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Audit-owned user display projection';
+
+CREATE TABLE `audit_query_record_projection` (
+    `target_type`        varchar(16)   NOT NULL,
+    `audit_id`           bigint        NOT NULL,
+    `target_id`          bigint        NOT NULL,
+    `applicant_username` varchar(128)  DEFAULT NULL,
+    `reviewer_username`  varchar(128)  DEFAULT NULL,
+    `target_name`        varchar(500)  DEFAULT NULL,
+    `target_url`         varchar(1000) DEFAULT NULL,
+    `update_time`        datetime(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`target_type`, `audit_id`),
+    KEY `idx_audit_query_record_target` (`target_type`, `target_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Immutable display snapshot per audit record';
+
 CREATE TABLE `biz_image_delete_dead_letter` (
     `id`           bigint       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `resource_id`  varchar(64)  DEFAULT NULL COMMENT '业务资源ID；遗留数据可为空',
     `image_url`    varchar(1000) NOT NULL COMMENT '待删除图片URL(OSS/R2等完整地址)',
-    `status`       tinyint      NOT NULL DEFAULT 0 COMMENT '删除状态(0:等待删除, 1:删除完成)',
+    `event_id`     varchar(64)  DEFAULT NULL COMMENT '最近一次可靠删除事件ID',
+    `status`       tinyint      NOT NULL DEFAULT 0 COMMENT '0:遗留待迁移, 1:完成, 2:已入队, 3:失败',
     `retry_count`  int          NOT NULL DEFAULT 0 COMMENT '重试次数',
+    `last_error`   varchar(500) DEFAULT NULL COMMENT '脱敏后的最后失败原因',
     `create_time`  datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入队时间',
     `update_time`  datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '状态更新时间',
+    `completed_time` datetime   DEFAULT NULL COMMENT '物理删除完成时间',
     PRIMARY KEY (`id`),
-    KEY `idx_status_update` (`status`, `update_time`)
+    KEY `idx_status_update` (`status`, `update_time`),
+    KEY `idx_delete_event` (`event_id`),
+    KEY `idx_delete_resource` (`resource_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图片删除死信队列表';

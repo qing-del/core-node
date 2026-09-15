@@ -7,7 +7,10 @@ import org.springframework.stereotype.Component;
 import java.util.concurrent.TimeUnit;
 
 @Component
-@ConditionalOnProperty(prefix = "jacolp.aliyun.oss", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(
+        prefix = "jacolp.aliyun.oss",
+        name = {"enabled", "keep-live-enabled"},
+        havingValue = "true")
 public class AliyunOSSClientKeepLiveTask {
     private final AliyunOSSClient client;
     public AliyunOSSClientKeepLiveTask(AliyunOSSClient client) { this.client = client; }

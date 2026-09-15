@@ -72,6 +72,17 @@ public class UserQuotaApiService implements UserQuotaApi {
         }
     }
 
+    @Override
+    public void releaseStorage(long userId, long amountBytes) {
+        if (userId <= 0) throw new IllegalArgumentException("userId must be positive");
+        if (amountBytes <= 0) throw new IllegalArgumentException("amountBytes must be positive");
+        if (userMapper.releaseStorageIfSufficient(userId, amountBytes) != 1) {
+            QuotaSnapshot current = getQuota(userId, QuotaType.STORAGE_BYTES, null);
+            throw new IllegalStateException("Storage release would underflow: userId=" + userId
+                    + ", requested=" + amountBytes + ", used=" + current.used());
+        }
+    }
+
     private QuotaSnapshot dailyApiQuota(long userId, LocalDate quotaDate) {
         UserDO user = userMapper.selectById(userId);
         if (user == null) {

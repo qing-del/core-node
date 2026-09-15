@@ -2,7 +2,6 @@ package com.jacolp.module.note.biz.application.facade;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,12 +26,13 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.jacolp.context.PermissionContext;
+import com.jacolp.middleware.messaging.event.StorageReleasedEvent;
+import com.jacolp.middleware.messaging.pulisher.StorageReleasedEventPublisher;
 import com.jacolp.module.system.api.quota.StorageHandler;
 import com.jacolp.constant.NoteConstant;
 import com.jacolp.constant.TopicConstant;
 import com.jacolp.context.BaseContext;
 import com.jacolp.context.NoteImageResolveContext;
-import com.jacolp.module.system.api.quota.StorageUpdateContext;
 import com.jacolp.framework.markdown.converter.MarkdownHtmlEngine;
 import com.jacolp.enums.NoteStatus;
 import com.jacolp.module.system.api.quota.StorageOperationType;
@@ -83,6 +83,7 @@ public class NoteFacadeImpl implements NoteFacade {
     @Autowired private TagService tagService;
 
     @Autowired private JsonOperator jsonOperator;
+    @Autowired private StorageReleasedEventPublisher storageReleasedEventPublisher;
 
 
     /**
@@ -355,11 +356,11 @@ public class NoteFacadeImpl implements NoteFacade {
      *   <li>汇总各用户的文件大小（供 {@code @StorageHandler} 回收配额）</li>
      *   <li>依次清理转换结果 → Diff 记录 → 文本内容 → 三类映射</li>
      *   <li>笔记行状态标记为 DELETED（软删除）</li>
-     *   <li>通过 {@link StorageUpdateContext} 传递存储回收信息给切面 - 进入了该方法就一定要清除 StorageUpdateContext 中的内容</li>
+     *   <li>在同一事务写入存储释放 Outbox 事件</li>
      * </ol>
      */
     @Override
-    @StorageHandler(operationType = StorageOperationType.BATCH_DELETE)
+    @Transactional(rollbackFor = Exception.class)
     public void adminDeleteNotes(List<Long> ids) {
         // 批量获取笔记 & 检查数量级是否能对应上
         List<NoteDO> notes = noteCoreService.getByIds(ids);
@@ -367,8 +368,8 @@ public class NoteFacadeImpl implements NoteFacade {
             throw new BaseException(NoteConstant.NOTE_NOT_FOUND);
         }
 
-        // 检查笔记状态 & 构建存储回收信息
-        Map<Long, Long> userStorageMap = checkAndBuildStorageMap(notes);
+        // 检查笔记状态
+        checkNotesDeletable(notes);
 
         // 依次清理五类关联数据
         noteConvertService.deleteAllByNoteIds(ids);
@@ -379,8 +380,12 @@ public class NoteFacadeImpl implements NoteFacade {
         // 软删除笔记行
         noteCoreService.updateStatusByIds(ids, NoteStatus.DELETED.getCode());
 
-        // 传递给 @StorageHandler 切面用于批量更新用户存储用量
-        StorageUpdateContext.setStorageMap(userStorageMap); // 在 StorageHandler 中已有兜底清除机制
+        // 与软删除同事务记录每个资源的存储释放事实
+        storageReleasedEventPublisher.publish(notes.stream()
+                .filter(note -> safeLong(note.getMdFileSize()) > 0)
+                .map(note -> new StorageReleasedEvent(note.getUserId(), "NOTE",
+                        String.valueOf(note.getId()), safeLong(note.getMdFileSize())))
+                .toList());
     }
 
     /**
@@ -389,7 +394,7 @@ public class NoteFacadeImpl implements NoteFacade {
      * @param noteId 笔记 ID
      */
     @Override
-    @StorageHandler(operationType = StorageOperationType.DELETE)
+    @Transactional(rollbackFor = Exception.class)
     public void deleteNote(Long noteId) {
         NoteDO note = noteCoreService.getById(noteId);
 
@@ -409,8 +414,12 @@ public class NoteFacadeImpl implements NoteFacade {
         // 更新笔记状态（软删除）
         noteCoreService.updateStatusByIds(List.of(noteId), NoteStatus.DELETED.getCode());
 
-        // 构建存储回收信息（上下文传递）
-        StorageUpdateContext.setStorageMap(Map.of(note.getUserId(), note.getMdFileSize()));
+        // 与软删除同事务记录存储释放事实
+        long releasedBytes = safeLong(note.getMdFileSize());
+        if (releasedBytes > 0) {
+            storageReleasedEventPublisher.publish(List.of(new StorageReleasedEvent(note.getUserId(),
+                    "NOTE", String.valueOf(note.getId()), releasedBytes)));
+        }
     }
 
     /**
@@ -621,12 +630,9 @@ public class NoteFacadeImpl implements NoteFacade {
 
     /**
      * 检查笔记状态
-     * <p>构建用户存储回收量</p>
-     *
-     * @return 用户存储回收量的 <userId, fileSize(Long)> 的 Map
      * @throws BaseException 如果存在不可删除状态的笔记 会抛出此异常
      */
-    private @NonNull Map<Long, Long> checkAndBuildStorageMap(List<NoteDO> notes) {
+    private void checkNotesDeletable(List<NoteDO> notes) {
         // 状态校验 — 审核中和已公开的笔记不允许删除
         for (NoteDO note : notes) {
             NoteStatus status = NoteStatus.fromCode(note.getStatus());
@@ -637,13 +643,6 @@ public class NoteFacadeImpl implements NoteFacade {
                 throw new BaseException("笔记【" + note.getTitle() + "】已公开，请先下架后再删除");
             }
         }
-
-        // 汇总各用户的存储回收量
-        Map<Long, Long> userStorageMap = new LinkedHashMap<>();
-        for (NoteDO note : notes) {
-            userStorageMap.merge(note.getUserId(), safeLong(note.getMdFileSize()), Long::sum);
-        }
-        return userStorageMap;
     }
 
     /**
