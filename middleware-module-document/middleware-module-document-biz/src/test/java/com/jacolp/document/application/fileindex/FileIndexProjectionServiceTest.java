@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import com.jacolp.document.enums.DocumentPermission;
@@ -26,6 +27,11 @@ import com.jacolp.note.api.model.NoteFileIndexSource;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -137,6 +143,48 @@ class FileIndexProjectionServiceTest {
         assertThat(ids.getAllValues()).containsExactlyInAnyOrder("NOTE:7", "IMAGE:8", "DOCUMENT:9");
         verify(noteFileIndexApi).listAfterId(0L, FileIndexProjectionService.DEFAULT_PAGE_SIZE);
         verify(mediaFileIndexApi).listAfterId(0L, FileIndexProjectionService.DEFAULT_PAGE_SIZE);
+    }
+
+    @Test
+    void delaysIncrementalRefreshUntilRebuildHasFinishedWritingItsOldPage() throws Exception {
+        NoteFileIndexSource oldSource = new NoteFileIndexSource(7L, 42L, "旧标题", false, false);
+        NoteFileIndexSource currentSource = new NoteFileIndexSource(7L, 42L, "新标题", false, false);
+        when(noteFileIndexApi.listAfterId(0L, FileIndexProjectionService.DEFAULT_PAGE_SIZE)).thenReturn(List.of(oldSource));
+        when(mediaFileIndexApi.listAfterId(0L, FileIndexProjectionService.DEFAULT_PAGE_SIZE)).thenReturn(List.of());
+        when(documentMapper.selectByIdAfter(0L, FileIndexProjectionService.DEFAULT_PAGE_SIZE)).thenReturn(List.of());
+        when(noteFileIndexApi.findById(7L)).thenReturn(Optional.of(currentSource));
+        CountDownLatch rebuildWriteStarted = new CountDownLatch(1);
+        CountDownLatch releaseRebuild = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            rebuildWriteStarted.countDown();
+            assertThat(releaseRebuild.await(5, TimeUnit.SECONDS)).isTrue();
+            return null;
+        }).doNothing().when(elasticsearchOperations).index(eq("file-v07"), eq("NOTE:7"), any());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> rebuild = executor.submit(service::rebuildAll);
+            assertThat(rebuildWriteStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            CountDownLatch refreshEntered = new CountDownLatch(1);
+            Future<?> refresh = executor.submit(() -> {
+                refreshEntered.countDown();
+                service.refresh(new FileIndexResourceKey(FileIndexResourceType.NOTE, 7L));
+            });
+            assertThat(refreshEntered.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(refresh.isDone()).isFalse();
+            verify(noteFileIndexApi, never()).findById(7L);
+
+            releaseRebuild.countDown();
+            rebuild.get(5, TimeUnit.SECONDS);
+            refresh.get(5, TimeUnit.SECONDS);
+        } finally {
+            releaseRebuild.countDown();
+            executor.shutdownNow();
+        }
+
+        ArgumentCaptor<FileIndexDocument> documents = ArgumentCaptor.forClass(FileIndexDocument.class);
+        verify(elasticsearchOperations, times(2)).index(eq("file-v07"), eq("NOTE:7"), documents.capture());
+        assertThat(documents.getAllValues().getLast().fileName()).isEqualTo("新标题");
     }
 
     private static DocumentDO document(long id, long ownerUserId, String title, boolean deleted) {

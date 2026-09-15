@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeSet;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +39,8 @@ public class FileIndexProjectionService {
     private final MediaFileIndexApi mediaFileIndexApi;
     private final DocumentMapper documentMapper;
     private final DocumentUserMappingMapper documentUserMappingMapper;
+    /** 单实例内让全量重建独占投影写入，避免旧分页快照覆盖其间的增量刷新。 */
+    private final ReentrantReadWriteLock projectionLock = new ReentrantReadWriteLock(true);
 
     /** 保存跨模块最小事实 API、文档 persistence 和 ES 投影操作。 */
     public FileIndexProjectionService(ElasticsearchClient elasticsearchClient,
@@ -61,22 +64,32 @@ public class FileIndexProjectionService {
     /** 重新读取一个资源的当前事实；资源硬删除或不存在时删除稳定 ID 对应的 ES 文档。 */
     public void refresh(FileIndexResourceKey resourceKey) {
         Objects.requireNonNull(resourceKey, "resourceKey must not be null");
-        String indexName = indexResolver.requireIndex(FileIndexMappingInitializer.LOGICAL_INDEX_NAME);
-        FileIndexDocument document = loadCurrent(resourceKey);
-        if (document == null) {
-            elasticsearchOperations.delete(indexName, resourceKey.indexId());
-            return;
+        projectionLock.readLock().lock();
+        try {
+            String indexName = indexResolver.requireIndex(FileIndexMappingInitializer.LOGICAL_INDEX_NAME);
+            FileIndexDocument document = loadCurrent(resourceKey);
+            if (document == null) {
+                elasticsearchOperations.delete(indexName, resourceKey.indexId());
+                return;
+            }
+            elasticsearchOperations.index(indexName, resourceKey.indexId(), document);
+        } finally {
+            projectionLock.readLock().unlock();
         }
-        elasticsearchOperations.index(indexName, resourceKey.indexId(), document);
     }
 
     /** 清理旧投影后按 NOTE、IMAGE、DOCUMENT 的 ID 游标重新写入全部当前事实。 */
     public void rebuildAll() {
-        String indexName = indexResolver.requireIndex(FileIndexMappingInitializer.LOGICAL_INDEX_NAME);
-        clearProjection(indexName);
-        rebuildNotes(indexName);
-        rebuildImages(indexName);
-        rebuildDocuments(indexName);
+        projectionLock.writeLock().lock();
+        try {
+            String indexName = indexResolver.requireIndex(FileIndexMappingInitializer.LOGICAL_INDEX_NAME);
+            clearProjection(indexName);
+            rebuildNotes(indexName);
+            rebuildImages(indexName);
+            rebuildDocuments(indexName);
+        } finally {
+            projectionLock.writeLock().unlock();
+        }
     }
 
     /** 读取当前资源，所有跨模块状态映射均在本模块的投影边界完成。 */
