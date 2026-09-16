@@ -10,6 +10,7 @@ public class MinioProperties {
     private String endpoint;
     private String accessKey;
     private String secretKey;
+    private boolean useSystemProxy;
     private Map<String, String> bucket = new LinkedHashMap<>();
 
     /** 返回 MinIO 服务端点。 */
@@ -24,6 +25,10 @@ public class MinioProperties {
     public String getSecretKey() { return secretKey; }
     /** 设置秘密密钥。 */
     public void setSecretKey(String secretKey) { this.secretKey = secretKey; }
+    /** 返回 MinIO SDK 是否使用 JVM 的系统代理。 */
+    public boolean isUseSystemProxy() { return useSystemProxy; }
+    /** 设置 MinIO SDK 是否使用 JVM 的系统代理。 */
+    public void setUseSystemProxy(boolean useSystemProxy) { this.useSystemProxy = useSystemProxy; }
     /** 返回逻辑桶名到物理桶名的映射。 */
     public Map<String, String> getBucket() { return bucket; }
     /** 复制逻辑桶名映射；null 表示没有桶映射。 */

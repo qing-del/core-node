@@ -1,6 +1,8 @@
 package com.jacolp.framework.minio;
 
 import io.minio.MinioClient;
+import java.net.Proxy;
+import okhttp3.OkHttpClient;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -24,7 +26,21 @@ public class MinioAutoConfiguration {
         return MinioClient.builder()
                 .endpoint(properties.getEndpoint())
                 .credentials(properties.getAccessKey(), properties.getSecretKey())
+                .httpClient(createHttpClient(properties.isUseSystemProxy()))
                 .build();
+    }
+
+    /**
+     * 创建 MinIO 使用的 HTTP 客户端；默认绕过 JVM 系统代理，避免 Tailscale 地址被代理接管。
+     *
+     * <p>当启用系统代理时不设置固定代理，让 OkHttp 使用默认的 {@code ProxySelector}。</p>
+     */
+    static OkHttpClient createHttpClient(boolean useSystemProxy) {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+        if (!useSystemProxy) {
+            builder.proxy(Proxy.NO_PROXY);
+        }
+        return builder.build();
     }
 
     /** 暴露逻辑桶名解析器，隔离业务配置键与物理桶名。 */

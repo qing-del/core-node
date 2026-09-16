@@ -16,6 +16,8 @@ jacolp:
     endpoint: http://localhost:9000
     access-key: minioadmin
     secret-key: minioadmin
+    # 是否使用 JVM/系统代理；访问 Tailscale 内网 MinIO 时通常保持 false
+    use-system-proxy: false
     bucket:
       document: middleware-document
 ```
