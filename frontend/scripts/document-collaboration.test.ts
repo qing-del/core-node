@@ -7,9 +7,13 @@ import {
 } from 'y-protocols/awareness'
 import {
   createDocumentWsControl,
+  decodeDocumentLinkPayload,
   decodeDocumentWsFrame,
+  DocumentBindingCommandType,
+  DocumentBindingTargetType,
   DocumentWsFrameType,
-  encodeDocumentWsFrame
+  encodeDocumentWsFrame,
+  type DocumentLinkIntent
 } from '../src/collaboration/documentProtocol.ts'
 import { DocumentCollaborationClient } from '../src/collaboration/DocumentCollaborationClient.ts'
 
@@ -301,6 +305,156 @@ test('clears pending Awareness sends across reconnect and dispose', () => {
     client.dispose()
     Date.now = originalDateNow
     environment.restore()
+  }
+})
+
+test('buffers composition updates and sends one merged CLIENT_UPDATE after commit', () => {
+  const environment = installFakeBrowser()
+  const ydoc = new Y.Doc()
+  let composing = false
+  const client = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc,
+    canWrite: true,
+    isComposing: () => composing
+  })
+
+  try {
+    client.connect()
+    const socket = FakeWebSocket.instances[0]
+    assert.ok(socket)
+    socket.open()
+    socket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+
+    composing = true
+    const text = ydoc.getText('content')
+    text.insert(0, 'pin')
+    text.delete(0, 3)
+    assert.equal(countFrames(socket, DocumentWsFrameType.CLIENT_UPDATE), 0)
+
+    composing = false
+    text.insert(0, '中')
+    assert.equal(countFrames(socket, DocumentWsFrameType.CLIENT_UPDATE), 1)
+
+    const remote = new Y.Doc()
+    Y.applyUpdate(remote, findFrame(socket, DocumentWsFrameType.CLIENT_UPDATE).payload)
+    assert.equal(remote.getText('content').toString(), '中')
+    remote.destroy()
+  } finally {
+    client.dispose()
+    ydoc.destroy()
+    environment.restore()
+  }
+})
+
+test('keeps LINK frames separate from composition updates', () => {
+  const environment = installFakeBrowser()
+  const ydoc = new Y.Doc()
+  let composing = true
+  const client = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc,
+    canWrite: true,
+    isComposing: () => composing
+  })
+  const intent: DocumentLinkIntent = {
+    kind: 'document-link-intent',
+    schemaVersion: 1,
+    commandType: DocumentBindingCommandType.BIND,
+    refId: '123e4567-e89b-12d3-a456-426614174099',
+    targetType: DocumentBindingTargetType.DOCUMENT,
+    targetId: 42n
+  }
+
+  try {
+    client.connect()
+    const socket = FakeWebSocket.instances[0]
+    assert.ok(socket)
+    socket.open()
+    socket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+
+    ydoc.getMap('content').set('composition', '中')
+    ydoc.transact(() => {
+      ydoc.getMap('content').set('linked', true)
+    }, intent)
+
+    assert.equal(countFrames(socket, DocumentWsFrameType.CLIENT_UPDATE), 1)
+    assert.equal(countFrames(socket, DocumentWsFrameType.LINK), 1)
+    const clientUpdate = findFrame(socket, DocumentWsFrameType.CLIENT_UPDATE)
+    const link = findFrame(socket, DocumentWsFrameType.LINK)
+
+    const remote = new Y.Doc()
+    Y.applyUpdate(remote, clientUpdate.payload)
+    // The LINK payload has an envelope prefix; decode its raw update through the
+    // existing wire helper so this test also verifies the frame boundary.
+    const rawLinkUpdate = decodeDocumentLinkPayload(link.payload).rawYjsUpdate
+    Y.applyUpdate(remote, rawLinkUpdate)
+    assert.equal(remote.getMap('content').get('composition'), '中')
+    assert.equal(remote.getMap('content').get('linked'), true)
+    remote.destroy()
+  } finally {
+    client.dispose()
+    ydoc.destroy()
+    environment.restore()
+  }
+})
+
+test('waitForInitialSync resolves after bootstrap and rejects when disposed', async () => {
+  const environment = installFakeBrowser()
+  const ydoc = new Y.Doc()
+  const client = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc,
+    canWrite: true
+  })
+
+  try {
+    const initialSync = client.waitForInitialSync()
+    client.connect()
+    const socket = FakeWebSocket.instances[0]
+    assert.ok(socket)
+    socket.open()
+
+    const bootstrap = new Y.Doc()
+    bootstrap.getMap('content').set('loaded', true)
+    socket.receive(encodeDocumentWsFrame(
+      DocumentWsFrameType.SNAPSHOT_STATE,
+      '00000000-0000-4000-8000-000000000001',
+      Y.encodeStateAsUpdate(bootstrap)
+    ))
+    socket.receive(JSON.stringify(createDocumentWsControl('SYNC_COMPLETE', { documentId: 42 })))
+
+    await initialSync
+    assert.equal(ydoc.getMap('content').get('loaded'), true)
+    bootstrap.destroy()
+
+    const alreadySynced = client.waitForInitialSync()
+    await alreadySynced
+  } finally {
+    client.dispose()
+    ydoc.destroy()
+    environment.restore()
+  }
+
+  const secondEnvironment = installFakeBrowser()
+  const secondDoc = new Y.Doc()
+  const secondClient = new DocumentCollaborationClient({
+    documentId: 42,
+    accessToken: 'test-token',
+    ydoc: secondDoc,
+    canWrite: true
+  })
+  try {
+    const pending = secondClient.waitForInitialSync()
+    secondClient.dispose()
+    await assert.rejects(pending, /文档协作客户端已释放/)
+  } finally {
+    secondClient.dispose()
+    secondDoc.destroy()
+    secondEnvironment.restore()
   }
 })
 

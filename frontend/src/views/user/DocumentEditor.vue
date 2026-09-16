@@ -641,6 +641,9 @@ async function initializeEditor(): Promise<void> {
   }
 
   loading.value = true
+  /** 等待首轮同步期间暂存的协作资源；路由切换或同步失败时由当前初始化负责释放。 */
+  let pendingDocument: Y.Doc | null = null
+  let pendingClient: DocumentCollaborationClient | null = null
   try {
     /** 服务端返回的文档元数据，作为标题和协作连接配置的来源。 */
     const loadedMetadata = await documentApi.getMetadata(documentId.value)
@@ -656,6 +659,7 @@ async function initializeEditor(): Promise<void> {
 
     /** 与当前 Tiptap 编辑器绑定的共享 Yjs 文档。 */
     const document = new Y.Doc()
+    pendingDocument = document
     // 编辑器绑定前先创建具名 Yjs 根节点；所有 Tiptap 文档内容随后都从这个唯一的
     // `content` fragment 读写。
     document.getXmlFragment('content')
@@ -672,6 +676,7 @@ async function initializeEditor(): Promise<void> {
       accessToken,
       ydoc: document,
       canWrite: canWriteMetadata(loadedMetadata),
+      isComposing: () => editor?.view.composing === true,
       onStateChange: (state, message) => {
         if (requestedVersion !== initializationVersion) return
         connectionState.value = state
@@ -709,6 +714,21 @@ async function initializeEditor(): Promise<void> {
       }
     })
 
+    // 先登记资源再连接；首轮同步尚未完成前，页面销毁或路由切换也能中止本次连接。
+    pendingClient = client
+    ydoc = document
+    collaborationClient = client
+    client.connect()
+    await client.waitForInitialSync()
+
+    if (requestedVersion !== initializationVersion || !editorHost.value) {
+      client.dispose()
+      document.destroy()
+      if (collaborationClient === client) collaborationClient = null
+      if (ydoc === document) ydoc = null
+      return
+    }
+
     /** 绑定编辑器 DOM 和协作扩展的 Tiptap 实例。 */
     const instance = new Editor({
       element: editorHost.value,
@@ -717,7 +737,9 @@ async function initializeEditor(): Promise<void> {
         StarterKit.configure({ undoRedo: false }),
         Collaboration.configure({ document, field: 'content' }),
         createDocumentCollaborationCaret(client, localAwarenessUser),
-        CrdtNodeIdentity,
+        CrdtNodeIdentity.configure({
+          isComposing: () => editor?.view.composing === true
+        }),
         ResourceReference,
         createDocumentResourceLinkExtension({
           ydoc: document,
@@ -733,6 +755,13 @@ async function initializeEditor(): Promise<void> {
         attributes: {
           class: 'document-tiptap-editor',
           'aria-label': '协作文档编辑器'
+        },
+        handleDOMEvents: {
+          compositionend: () => {
+            // 让 ProseMirror 先处理 compositionend 后的最终 DOM 变更，再合并出站更新。
+            client.notifyCompositionEnd()
+            return false
+          }
         }
       },
       onTransaction: () => { editorVersion.value += 1 }
@@ -743,17 +772,28 @@ async function initializeEditor(): Promise<void> {
       instance.destroy()
       client.dispose()
       document.destroy()
+      if (collaborationClient === client) collaborationClient = null
+      if (ydoc === document) ydoc = null
       return
     }
-    ydoc = document
-    collaborationClient = client
     editor = instance
-    client.connect()
+    pendingDocument = null
+    pendingClient = null
+    // 首次 synced 回调发生在编辑器创建前，因此这里需要显式恢复正文可编辑状态。
+    instance.setEditable(editorCanEdit.value)
   } catch (cause) {
     if (requestedVersion === initializationVersion) {
+      if (pendingClient && collaborationClient === pendingClient) {
+        pendingClient.dispose()
+        collaborationClient = null
+      }
+      if (pendingDocument && ydoc === pendingDocument) {
+        pendingDocument.destroy()
+        ydoc = null
+      }
       // 元数据请求阶段不区分不存在、无权和其他服务端失败，统一使用中性提示，
       // 避免通过页面反馈泄露文档是否存在。
-      if (!metadata.value || isDocumentUnavailableError(cause)) {
+      if (!metadata.value || accessUnavailable.value || isDocumentUnavailableError(cause)) {
         accessUnavailable.value = true
         error.value = DOCUMENT_UNAVAILABLE_MESSAGE
       } else {

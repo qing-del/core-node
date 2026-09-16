@@ -24,6 +24,8 @@ export interface CrdtNodeIdentityAttributes {
 export interface CrdtNodeIdentityOptions {
   /** 可注入确定性的 UUID 生成器，便于协议和复制测试。 */
   generateNodeId?: () => string
+  /** 返回当前编辑器是否仍处于 IME composition；组字中间事务不递增 nodeVersion。 */
+  isComposing?: () => boolean
 }
 
 export const CRDT_NODE_IDENTITY_TRANSACTION_META = 'crdt-node-identity-normalization'
@@ -240,6 +242,7 @@ function collectIdentityUpdates(
     const deferDuplicateResourceReference = node.type.name === RESOURCE_REFERENCE_NODE_NAME
       && duplicateNodeId
       && isValidCrdtNodeId(currentRefId)
+      && nodeId !== null
       && nodeId.toLowerCase() === currentRefId.toLowerCase()
     if (!identityConflict && (!nodeId || duplicateNodeId) && !deferDuplicateResourceReference) {
       const legacyRefId = node.type.name === RESOURCE_REFERENCE_NODE_NAME && isValidCrdtNodeId(currentRefId)
@@ -289,7 +292,8 @@ export const CrdtNodeIdentity = Extension.create<CrdtNodeIdentityOptions>({
 
   addOptions() {
     return {
-      generateNodeId: () => crypto.randomUUID()
+      generateNodeId: () => crypto.randomUUID(),
+      isComposing: () => false
     }
   },
 
@@ -321,6 +325,7 @@ export const CrdtNodeIdentity = Extension.create<CrdtNodeIdentityOptions>({
 
   addProseMirrorPlugins() {
     const generateNodeId = this.options.generateNodeId ?? (() => crypto.randomUUID())
+    const isComposing = this.options.isComposing ?? (() => false)
     return [new Plugin({
       key: new PluginKey('crdtNodeIdentity'),
 
@@ -337,7 +342,10 @@ export const CrdtNodeIdentity = Extension.create<CrdtNodeIdentityOptions>({
 
         // Yjs change-origin transactions already carry the authoritative remote version.
         const hasLocalChange = relevantTransactions.some(transaction => !isChangeOrigin(transaction))
-        if (hasLocalChange) {
+        const hasLocalComposition = isComposing() && relevantTransactions.some(transaction =>
+          !isChangeOrigin(transaction) && transaction.getMeta('composition') !== undefined
+        )
+        if (hasLocalChange && !hasLocalComposition) {
           const before = collectSnapshots(oldState.doc)
           const after = collectSnapshots(newState.doc)
           for (const [nodeId, snapshot] of after) {

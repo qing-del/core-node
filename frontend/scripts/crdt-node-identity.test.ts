@@ -49,8 +49,11 @@ function createSchema(): Schema {
   })
 }
 
-function createIdentityPlugin(generateNodeId: () => string) {
-  const extension = CrdtNodeIdentity.configure({ generateNodeId })
+function createIdentityPlugin(
+  generateNodeId: () => string,
+  isComposing: () => boolean = () => false
+) {
+  const extension = CrdtNodeIdentity.configure({ generateNodeId, isComposing })
   return extension.config.addProseMirrorPlugins!.call(extension)[0]
 }
 
@@ -154,6 +157,28 @@ test('increments only the changed node and only once per local transaction', () 
   }))
   assert.equal(state.doc.child(1).attrs.nodeVersion, 0)
   assert.equal(state.doc.nodeAt(referencePosition)?.attrs.nodeVersion, 1)
+})
+
+test('does not increment during composition and increments once when composition commits', () => {
+  const schema = createSchema()
+  const doc = schema.node('doc', null, [
+    schema.node('paragraph', { nodeId: PARAGRAPH_ID, nodeVersion: 0 })
+  ])
+  let composing = true
+  let state = EditorState.create({
+    schema,
+    doc,
+    plugins: [createIdentityPlugin(() => crypto.randomUUID(), () => composing)]
+  })
+
+  state = apply(state, state.tr.insertText('p', 1).setMeta('composition', 1))
+  assert.equal(state.doc.firstChild?.textContent, 'p')
+  assert.equal(state.doc.firstChild?.attrs.nodeVersion, 0)
+
+  composing = false
+  state = apply(state, state.tr.replaceWith(1, 2, schema.text('中')).setMeta('composition', 1))
+  assert.equal(state.doc.firstChild?.textContent, '中')
+  assert.equal(state.doc.firstChild?.attrs.nodeVersion, 1)
 })
 
 test('preserves remote nodeVersion when a remote transaction changes node content', () => {

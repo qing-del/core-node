@@ -17,6 +17,7 @@ import {
   parseDocumentWsControl,
   parseDocumentWsLinkAccepted,
   type DocumentBindingEnvelope,
+  type DocumentLinkIntent,
   type DocumentWsAwarenessMeta,
   type DocumentWsControlMessage,
   type DocumentWsLinkAcceptedMessage
@@ -112,6 +113,8 @@ export interface DocumentCollaborationClientOptions {
   ydoc: Y.Doc
   /** 当前调用方是否拥有文档正文写权限；缺省策略由页面层显式传入。 */
   canWrite: boolean
+  /** 返回当前本地编辑器是否仍处于 IME composition。 */
+  isComposing?: () => boolean
   /** 连接状态变化回调；example: {@code (state) => console.log(state)} */
   onStateChange?: (state: DocumentConnectionState, message?: string) => void
   /** 在线协作者数量变化回调；example: {@code (count) => collaboratorCount.value = count} */
@@ -154,6 +157,11 @@ interface PendingBootstrapFrame {
   type: DocumentWsFrameType.SNAPSHOT_STATE | DocumentWsFrameType.BOOTSTRAP_UPDATE
   /** 从服务端收到的不可变 Yjs 二进制负载。 */
   payload: Uint8Array
+}
+
+interface InitialSyncWaiter {
+  resolve: () => void
+  reject: (reason?: unknown) => void
 }
 
 /** 标记服务端下发的 Yjs 更新，避免写回客户端更新队列。 */
@@ -203,8 +211,12 @@ export class DocumentCollaborationClient {
   private readonly onBeforeReconnect?: () => Promise<DocumentReconnectAccessResult>
   /** 当前会话是否允许产生和发送正文更新；Awareness 不受此状态影响。 */
   private writable: boolean
+  /** 当前本地编辑器是否处于 IME composition；未提供时视为普通输入。 */
+  private readonly isComposing?: () => boolean
   /** 尚未收到 UPDATE_ACCEPTED 的本地更新，按客户端更新 UUID 索引。 */
   private readonly pendingUpdates = new Map<string, PendingUpdate>()
+  /** composition 期间暂存的 raw Yjs 更新；提交时合并为一个普通客户端更新。 */
+  private readonly pendingCompositionUpdates: Uint8Array[] = []
   /** 当前同步尝试尚未完成最终构建的 Snapshot/Bootstrap 帧。 */
   private readonly pendingBootstrapFrames: PendingBootstrapFrame[] = []
   /** 当前同步尝试期间收到的远端 CRDT_UPDATE，不能在 Bootstrap 完成前直接应用。 */
@@ -215,6 +227,8 @@ export class DocumentCollaborationClient {
   private reconnectTimer: ReturnType<typeof window.setTimeout> | null = null
   /** 高频本地 Awareness 更新的 trailing 定时器。 */
   private awarenessSendTimer: ReturnType<typeof window.setTimeout> | null = null
+  /** compositionend 后等待 ProseMirror 完成最终 DOM flush 的定时器。 */
+  private compositionFlushTimer: ReturnType<typeof window.setTimeout> | null = null
   /** 最近一次成功发送本地 Awareness 的时间戳。 */
   private awarenessLastSentAt: number | null = null
   /** 已连续发起的重连次数，用于计算指数退避时长。 */
@@ -223,6 +237,10 @@ export class DocumentCollaborationClient {
   private disposed = false
   /** 服务端是否已经发送 SYNC_COMPLETE，可以发送本地更新。 */
   private synchronized = false
+  /** 是否已经完成本客户端生命周期内的首轮 bootstrap。 */
+  private initialSyncCompleted = false
+  /** 等待首轮 bootstrap 的页面初始化调用方。 */
+  private readonly initialSyncWaiters: InitialSyncWaiter[] = []
   /** 当前对外公布的连接状态；初始值为 `closed`。 */
   private currentState: DocumentConnectionState = 'closed'
   /** 服务端确认的 Session 元数据；key 是 Yjs Awareness client ID。 */
@@ -240,6 +258,7 @@ export class DocumentCollaborationClient {
     this.onAccessError = options.onAccessError
     this.onBeforeReconnect = options.onBeforeReconnect
     this.writable = options.canWrite
+    this.isComposing = options.isComposing
     this.awareness = new Awareness(this.ydoc)
     this.awarenessProvider = createDocumentAwarenessProvider({
       awareness: this.awareness,
@@ -258,6 +277,27 @@ export class DocumentCollaborationClient {
     if (!wasWritable && enabled && this.synchronized) {
       this.pendingUpdates.forEach(update => this.sendPendingUpdate(update))
     }
+  }
+
+  /** 等待首轮 bootstrap 应用完成；普通断线会继续等待后续重连。 */
+  waitForInitialSync(): Promise<void> {
+    if (this.initialSyncCompleted) return Promise.resolve()
+    if (this.disposed) return Promise.reject(new Error('文档协作客户端已释放'))
+    if (this.currentState === 'error') return Promise.reject(new Error('文档同步失败'))
+    return new Promise<void>((resolve, reject) => {
+      this.initialSyncWaiters.push({ resolve, reject })
+    })
+  }
+
+  /** compositionend 后延迟刷新，给 ProseMirror 留出完成最终 DOM 事务的时间。 */
+  notifyCompositionEnd(): void {
+    if (this.disposed) return
+    this.clearCompositionFlushTimer()
+    this.compositionFlushTimer = window.setTimeout(() => {
+      this.compositionFlushTimer = null
+      if (this.isLocalCompositionActive()) return
+      this.flushPendingCompositionUpdates()
+    }, 0)
   }
 
   /** 建立 bearer 子协议连接并发送 JOIN；已连接或已销毁时保持幂等。 */
@@ -354,6 +394,8 @@ export class DocumentCollaborationClient {
       this.reconnectTimer = null
     }
     this.clearAwarenessSendTimer()
+    this.clearCompositionFlushTimer()
+    this.rejectInitialSync(new Error('文档协作客户端已释放'))
     this.sendControl(createDocumentWsControl('LEAVE_DOCUMENT', {
       requestId: createDocumentWsRequestId(),
       documentId: this.documentId
@@ -365,6 +407,7 @@ export class DocumentCollaborationClient {
     this.awareness.off('change', this.handleAwarenessChange)
     this.pendingBootstrapFrames.length = 0
     this.pendingRemoteUpdates.length = 0
+    this.pendingCompositionUpdates.length = 0
     this.clearAwarenessSessions(false)
     removeAwarenessStates(this.awareness, [this.awareness.clientID], LOCAL_AWARENESS_ORIGIN)
     this.awareness.destroy()
@@ -374,12 +417,49 @@ export class DocumentCollaborationClient {
   /** 将本地 Yjs 更新放入待确认队列，直到服务端返回对应 ACK。 */
   private readonly handleDocumentUpdate = (update: Uint8Array, origin: unknown): void => {
     if (origin === REMOTE_UPDATE_ORIGIN || this.disposed || !this.writable) return
-    /** 用于服务端确认和本地重连重放的客户端更新 UUID。 */
-    const id = createDocumentWsRequestId()
     const linkIntent = isDocumentLinkIntent(origin) ? origin : null
-    // 每个本地 Yjs 变更都会保留到服务端发送 UPDATE_ACCEPTED；因此 bootstrap 期间的变更
-    // 能在首次 SYNC_COMPLETE 和后续重连后继续发送。
-    this.pendingUpdates.set(id, linkIntent
+    // LINK 的 Envelope 只描述这一笔绑定动作，不能把 composition 或其他正文更新
+    // 合并进同一个 LINK frame；普通更新则可以和此前缓存的 composition 一起发送。
+    if (linkIntent) {
+      this.flushPendingCompositionUpdates()
+      this.enqueuePendingUpdate(update, linkIntent)
+      return
+    }
+
+    if (this.isLocalCompositionActive()) {
+      // composition 中间状态只留在当前 Y.Doc；最终事务到达后会和它们一起合并。
+      this.pendingCompositionUpdates.push(update.slice())
+      return
+    }
+
+    const payload = this.takeCompositionUpdate(update)
+    if (!payload) return
+    this.enqueuePendingUpdate(payload, null)
+  }
+
+  /** 判断当前本地 Yjs 更新是否来自仍在组字的编辑器。 */
+  private isLocalCompositionActive(): boolean {
+    return this.isComposing?.() === true
+  }
+
+  /** 取出 composition 缓存，并可将最终普通更新一并合并。 */
+  private takeCompositionUpdate(additional?: Uint8Array): Uint8Array | null {
+    if (this.pendingCompositionUpdates.length === 0) return additional?.slice() ?? null
+    const updates = this.pendingCompositionUpdates.splice(0)
+    if (additional) updates.push(additional.slice())
+    return Y.mergeUpdates(updates)
+  }
+
+  /** 把已经结束的 composition 缓存作为普通 CLIENT_UPDATE 放入现有确认队列。 */
+  private flushPendingCompositionUpdates(): void {
+    const payload = this.takeCompositionUpdate()
+    if (payload) this.enqueuePendingUpdate(payload, null)
+  }
+
+  /** 为一笔普通更新或 LINK 更新创建唯一 ACK 记录，并按当前同步状态发送。 */
+  private enqueuePendingUpdate(update: Uint8Array, linkIntent: DocumentLinkIntent | null): void {
+    const id = createDocumentWsRequestId()
+    const pending: PendingUpdate = linkIntent
       ? {
           id,
           frameType: DocumentWsFrameType.LINK,
@@ -396,8 +476,11 @@ export class DocumentCollaborationClient {
           id,
           frameType: DocumentWsFrameType.CLIENT_UPDATE,
           payload: update.slice()
-        })
-    if (this.synchronized) this.sendPendingUpdate(this.pendingUpdates.get(id)!)
+        }
+    // 每个已提交的本地 Yjs 变更都会保留到服务端 ACK；因此 bootstrap 期间的变更
+    // 能在首次 SYNC_COMPLETE 和后续重连后继续发送。
+    this.pendingUpdates.set(id, pending)
+    if (this.synchronized) this.sendPendingUpdate(pending)
   }
 
   /** 仅在本地状态变化且连接已同步时请求发送 Awareness。 */
@@ -447,6 +530,7 @@ export class DocumentCollaborationClient {
         this.pendingUpdates.forEach(update => this.sendPendingUpdate(update))
         this.clearAwarenessSendTimer()
         this.sendLocalAwareness()
+        this.resolveInitialSync()
         break
       case 'UPDATE_ACCEPTED':
         if (control.clientUpdateId) this.pendingUpdates.delete(control.clientUpdateId)
@@ -742,6 +826,28 @@ export class DocumentCollaborationClient {
     this.awarenessSendTimer = null
   }
 
+  /** 清理尚未触发的 composition flush 任务。 */
+  private clearCompositionFlushTimer(): void {
+    if (this.compositionFlushTimer === null) return
+    window.clearTimeout(this.compositionFlushTimer)
+    this.compositionFlushTimer = null
+  }
+
+  /** 完成所有等待中的首轮同步调用方。 */
+  private resolveInitialSync(): void {
+    if (this.initialSyncCompleted) return
+    this.initialSyncCompleted = true
+    const waiters = this.initialSyncWaiters.splice(0)
+    for (const waiter of waiters) waiter.resolve()
+  }
+
+  /** 让首轮同步调用方在终端失败或释放时退出等待。 */
+  private rejectInitialSync(reason: unknown): void {
+    if (this.initialSyncCompleted) return
+    const waiters = this.initialSyncWaiters.splice(0)
+    for (const waiter of waiters) waiter.reject(reason)
+  }
+
   /** 发送当前客户端的 awareness 状态，不写入持久化更新队列。 */
   private sendLocalAwareness(): void {
     if (!this.synchronized || !this.isSocketOpen()) return
@@ -791,6 +897,7 @@ export class DocumentCollaborationClient {
 
   /** 记录不可恢复的协议错误并通知页面层。 */
   private fail(message: string): void {
+    this.rejectInitialSync(new Error(message))
     this.setState('error', message)
   }
 
