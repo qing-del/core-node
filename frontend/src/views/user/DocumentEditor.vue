@@ -163,6 +163,8 @@ interface AuthorizationRow extends DocumentUserAuthorization {
 
 /** 当前页面创建的 Tiptap 编辑器实例；销毁前或创建模式下为 `null`。 */
 let editor: Editor | null = null
+/** 编辑器实例是否已经登记到当前页面响应式状态；用于同步遮罩和编辑权限计算。 */
+const editorReady = ref(false)
 /** 与 Tiptap 共享内容绑定的 Yjs 文档；销毁前或创建模式下为 `null`。 */
 let ydoc: Y.Doc | null = null
 /** 当前页面使用的 WebSocket/Yjs 协作客户端；未初始化时为 `null`。 */
@@ -179,7 +181,7 @@ const documentId = computed<number | null>(() => {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 })
 /** 编辑器是否已经完成同步；READ 用户也可以在此状态查看实时内容。 */
-const editorIsSynced = computed(() => connectionState.value === 'synced' && Boolean(editor) && !accessUnavailable.value)
+const editorIsSynced = computed(() => connectionState.value === 'synced' && editorReady.value && !accessUnavailable.value)
 /** 当前调用方是否为文档所有者。标题和文档管理操作只允许该身份。 */
 const isOwner = computed(() => metadata.value?.owner === true)
 /** 当前调用方是否拥有正文写权限；OWNER 始终拥有写权限。 */
@@ -600,6 +602,7 @@ function teardownEditor(): void {
   // 再释放 WebSocket 客户端和 Awareness，避免插件在已销毁状态上继续回调。
   editor?.destroy()
   editor = null
+  editorReady.value = false
   collaborationClient?.dispose()
   collaborationClient = null
   ydoc?.destroy()
@@ -777,6 +780,7 @@ async function initializeEditor(): Promise<void> {
       return
     }
     editor = instance
+    editorReady.value = true
     pendingDocument = null
     pendingClient = null
     // 首次 synced 回调发生在编辑器创建前，因此这里需要显式恢复正文可编辑状态。
