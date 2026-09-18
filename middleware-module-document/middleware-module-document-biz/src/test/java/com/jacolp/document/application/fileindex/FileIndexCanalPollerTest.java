@@ -43,7 +43,7 @@ class FileIndexCanalPollerTest {
         Message batch = mock(Message.class);
         FileIndexCanalChangeExtractor extractor = mock(FileIndexCanalChangeExtractor.class);
         FileIndexCanalPublisher publisher = mock(FileIndexCanalPublisher.class);
-        when(connector.get(100)).thenReturn(batch);
+        when(connector.getWithoutAck(100)).thenReturn(batch);
         when(batch.getId()).thenReturn(17L);
         when(batch.getEntries()).thenReturn(List.of(mock(Entry.class)));
         when(extractor.extract(batch)).thenReturn(List.of(new FileIndexResourceKey(FileIndexResourceType.NOTE, 7L)));
@@ -66,7 +66,7 @@ class FileIndexCanalPollerTest {
         Message batch = mock(Message.class);
         FileIndexCanalChangeExtractor extractor = mock(FileIndexCanalChangeExtractor.class);
         FileIndexCanalPublisher publisher = mock(FileIndexCanalPublisher.class);
-        when(connector.get(100)).thenReturn(batch);
+        when(connector.getWithoutAck(100)).thenReturn(batch);
         when(batch.getId()).thenReturn(18L);
         when(batch.getEntries()).thenReturn(List.of(mock(Entry.class)));
         when(extractor.extract(batch)).thenReturn(List.of(new FileIndexResourceKey(FileIndexResourceType.IMAGE, 8L)));

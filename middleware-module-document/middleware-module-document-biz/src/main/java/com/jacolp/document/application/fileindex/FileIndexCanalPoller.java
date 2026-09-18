@@ -71,7 +71,7 @@ public class FileIndexCanalPoller {
         }
         Message batch;
         try {
-            batch = connector.get(requireBatchSize(properties.getBatchSize()));
+            batch = connector.getWithoutAck(requireBatchSize(properties.getBatchSize()));
         } catch (RuntimeException failure) {
             log.warn("file index Canal get failed: {}", safeMessage(failure));
             return;
