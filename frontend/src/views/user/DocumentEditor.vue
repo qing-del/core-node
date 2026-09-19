@@ -190,6 +190,18 @@ const canWrite = computed(() => metadata.value?.owner === true || metadata.value
 const canManageShareLinks = computed(() => isOwner.value && authStore.hasScope('document:write'))
 /** 编辑器是否已经同步且允许执行会改变正文的操作。 */
 const editorCanEdit = computed(() => editorIsSynced.value && canWrite.value)
+/** 当前 Yjs 本地历史栈中是否存在可撤销的操作。 */
+const canUndo = computed(() => {
+  // Tiptap/Yjs 的历史状态不属于 Vue 响应式系统；每个编辑器事务后重新检查。
+  void editorVersion.value
+  return editorCanEdit.value && (editor?.can().undo() ?? false)
+})
+/** 当前 Yjs 本地历史栈中是否存在可重做的操作。 */
+const canRedo = computed(() => {
+  // 与撤销保持同一刷新时机，避免历史栈切换后按钮残留旧状态。
+  void editorVersion.value
+  return editorCanEdit.value && (editor?.can().redo() ?? false)
+})
 /** 只有写权限、同步完成且弹层仍属于当前编辑器时才展示候选。 */
 const documentLinkPickerVisible = computed(() => Boolean(documentLinkPicker.value) && editorCanEdit.value)
 /** 将候选弹层限制在当前视口内；坐标由 ProseMirror 以 viewport 单位提供。 */
@@ -1165,8 +1177,8 @@ onUnmounted(() => {
         <p v-if="editorIsSynced && !canWrite" class="readonly-notice">你拥有此文档的只读权限，可以接收实时更新，但不能修改正文。</p>
 
         <div class="editor-toolbar" aria-label="文档编辑工具栏">
-          <button type="button" title="撤销" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().undo().run() ?? false)"><Undo2 class="h-4 w-4" /></button>
-          <button type="button" title="重做" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().redo().run() ?? false)"><Redo2 class="h-4 w-4" /></button>
+          <button type="button" title="撤销" :disabled="!canUndo" @click="runEditorCommand(() => editor?.chain().focus().undo().run() ?? false)"><Undo2 class="h-4 w-4" /></button>
+          <button type="button" title="重做" :disabled="!canRedo" @click="runEditorCommand(() => editor?.chain().focus().redo().run() ?? false)"><Redo2 class="h-4 w-4" /></button>
           <span class="toolbar-separator" />
           <button type="button" title="加粗" :class="{ active: isActive('bold') }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleBold().run() ?? false)"><Bold class="h-4 w-4" /></button>
           <button type="button" title="斜体" :class="{ active: isActive('italic') }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleItalic().run() ?? false)"><Italic class="h-4 w-4" /></button>
