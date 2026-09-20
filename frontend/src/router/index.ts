@@ -227,6 +227,12 @@ const router = createRouter({
           meta: { requiredScopes: ['note:read'] }
         },
         {
+          path: 'documents',
+          name: 'AdminDocuments',
+          component: () => import('@/views/admin/Documents.vue'),
+          meta: { requiredScopes: ['document:read'] }
+        },
+        {
           path: 'topics',
           name: 'AdminTopics',
           component: () => import('@/views/admin/Topics.vue'),

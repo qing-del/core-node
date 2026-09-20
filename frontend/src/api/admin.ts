@@ -120,6 +120,39 @@ export interface UserStatusParams {
   targetUserId?: number
 }
 
+// ── Collaborative documents ──────────────────────
+/** 管理员文档树中的文档叶子；不包含内部快照对象键。 */
+export interface AdminDocumentTreeItem {
+  documentId: number
+  title: string
+  /** Unix 毫秒时间戳 */
+  lastModifyTime: number
+  lastModifyUserId: number | null
+  hasSnapshot: boolean
+}
+
+/** 以文档所有者为根节点的管理员协作文档树。 */
+export interface AdminDocumentTreeNode {
+  userId: number
+  username: string | null
+  nickname: string | null
+  documents: AdminDocumentTreeItem[]
+}
+
+export interface AdminSnapshotHistoryClearItem {
+  documentId: number
+  deletedObjectCount: number
+  releasedBytes: number
+  success: boolean
+  failureMessage: string | null
+}
+
+export interface AdminSnapshotHistoryClearResponse {
+  documents: AdminSnapshotHistoryClearItem[]
+  deletedObjectCount: number
+  releasedBytes: number
+}
+
 // ── Audit types ──────────────────────────────────
 export interface AuditNoteItem {
   /** Audit record ID */
@@ -182,6 +215,14 @@ export interface AuditBatchReviewDTO {
 
 // ── API methods ───────────────────────────────────
 export const adminApi = {
+  // === Collaborative documents ===
+  getDocumentTree(): Promise<AdminDocumentTreeNode[]> {
+    return request.get('/admin/document')
+  },
+  clearDocumentSnapshotHistory(documentIds: number[]): Promise<AdminSnapshotHistoryClearResponse> {
+    return request.post('/admin/document/snapshot-history/clear', { documentIds })
+  },
+
   // === Audit ===
   getNoteAuditList(params: AuditQueryParams): Promise<PageResult<AuditNoteItem>> {
     return request.post('/admin/audit/note/list', params)
