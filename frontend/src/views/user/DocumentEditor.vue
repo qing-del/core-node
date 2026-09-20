@@ -1648,7 +1648,33 @@ h1 { margin: 10px 0; color: var(--cn-text); font-size: 28px; font-weight: 800; }
 .authorization-row-time { margin: 9px 0 0; color: var(--cn-text-faint); font-size: 10px; }
 :deep(.document-tiptap-editor) { min-height: 62vh; outline: none; padding: 34px clamp(22px, 5vw, 70px); color: var(--cn-text); font-size: 16px; line-height: 1.8; }
 :deep(.document-tiptap-editor > :first-child) { margin-top: 0; }
-:deep(.document-tiptap-editor h1), :deep(.document-tiptap-editor h2), :deep(.document-tiptap-editor h3) { color: var(--cn-text); line-height: 1.3; }
+:deep(.document-tiptap-editor p) { margin: 0 0 .8em; }
+:deep(.document-tiptap-editor h1),
+:deep(.document-tiptap-editor h2),
+:deep(.document-tiptap-editor h3),
+:deep(.document-tiptap-editor h4),
+:deep(.document-tiptap-editor h5),
+:deep(.document-tiptap-editor h6) { color: var(--cn-text); font-weight: 800; line-height: 1.3; }
+:deep(.document-tiptap-editor h1) { margin: 1em 0 .45em; font-size: 2em; letter-spacing: -.02em; }
+:deep(.document-tiptap-editor h2) { margin: .95em 0 .45em; font-size: 1.5em; }
+:deep(.document-tiptap-editor h3) { margin: .9em 0 .4em; font-size: 1.25em; }
+:deep(.document-tiptap-editor h4) { margin: .85em 0 .35em; font-size: 1.125em; font-weight: 750; }
+:deep(.document-tiptap-editor h5) { margin: .8em 0 .3em; font-size: 1.0625em; font-weight: 750; }
+:deep(.document-tiptap-editor h6) { margin: .75em 0 .3em; font-size: 1em; font-weight: 750; }
+:deep(.document-tiptap-editor ul),
+:deep(.document-tiptap-editor ol) { margin: .75em 0; padding-left: 1.6em; }
+:deep(.document-tiptap-editor ul) { list-style-type: disc; }
+:deep(.document-tiptap-editor ul ul) { list-style-type: circle; }
+:deep(.document-tiptap-editor ul ul ul) { list-style-type: square; }
+:deep(.document-tiptap-editor ol) { list-style-type: decimal; }
+:deep(.document-tiptap-editor ol ol) { list-style-type: lower-alpha; }
+:deep(.document-tiptap-editor ol ol ol) { list-style-type: lower-roman; }
+:deep(.document-tiptap-editor li) { margin: .25em 0; }
+:deep(.document-tiptap-editor li > p) { margin: 0; }
+:deep(.document-tiptap-editor li > ul),
+:deep(.document-tiptap-editor li > ol) { margin: .25em 0; padding-left: 1.4em; }
+:deep(.document-tiptap-editor strong) { font-weight: 750; }
+:deep(.document-tiptap-editor em) { font-style: italic; }
 :deep(.document-tiptap-editor p.is-editor-empty:first-child::before) { float: left; height: 0; color: var(--cn-text-faint); content: '开始记录你的想法…'; pointer-events: none; }
 :deep(.document-resource-reference) { display: inline-block; border-radius: 4px; background: color-mix(in srgb, var(--cn-accent) 12%, transparent); color: var(--cn-accent); padding: 0 4px; font-size: .92em; font-weight: 700; }
 :deep(.document-resource-reference.ProseMirror-selectednode) { outline: 2px solid color-mix(in srgb, var(--cn-accent) 58%, transparent); outline-offset: 1px; }
