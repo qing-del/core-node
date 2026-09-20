@@ -60,11 +60,11 @@ class BusinessRouteScopeCatalogConfigurationTest {
         Map<String, Long> policyRoutes = BusinessRouteScopeCatalogConfiguration.entries().stream()
                 .collect(Collectors.groupingBy(BusinessRouteScopeCatalogConfigurationTest::route, Collectors.counting()));
 
-        assertThat(mappedRoutes).hasSize(134);
+        assertThat(mappedRoutes).hasSize(135);
         assertThat(mappedRoutes).containsAll(EXCEPTIONS);
         assertThat(EXCEPTIONS).hasSize(4);
-        assertThat(protectedRoutes).hasSize(130);
-        assertThat(policyRoutes).hasSize(130);
+        assertThat(protectedRoutes).hasSize(131);
+        assertThat(policyRoutes).hasSize(131);
         assertThat(policyRoutes.keySet()).containsExactlyInAnyOrderElementsOf(protectedRoutes);
         assertThat(policyRoutes.values()).allMatch(count -> count == 1L);
     }
@@ -102,8 +102,8 @@ class BusinessRouteScopeCatalogConfigurationTest {
         assertThat(document.lines().filter(line -> line.startsWith("## `/user/**`")).toList())
                 .containsExactly("## `/user/**`：user client（84 bearer routes）");
         assertThat(document.lines().filter(line -> line.startsWith("## `/admin/**`")).toList())
-                .containsExactly("## `/admin/**`：admin client（46 bearer routes）");
-        assertThat(document).contains("134 个", "88 个 user", "46 个 admin", "130 个是 bearer", "4 个是下文明确排除");
+                .containsExactly("## `/admin/**`：admin client（47 bearer routes）");
+        assertThat(document).contains("135 个", "88 个 user", "47 个 admin", "131 个是 bearer", "4 个是下文明确排除");
         assertThat(document).contains("`GET /user/note/source/{id}`", "`audit:write`", "`audit:manage`",
                 "`note:read` + `media:read`", "`note:write` + `media:read`", "`document:read`",
                 "`document:write`", "`GET /user/document/{documentId}/users`",

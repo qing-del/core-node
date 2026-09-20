@@ -45,6 +45,16 @@
           AND deleted = 0
     </select>
 
+    <select id="selectActiveByIds" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE deleted = 0
+          AND id IN
+          <foreach collection="ids" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
+    </select>
+
     <select id="selectByIdAfter" resultMap="DocumentMap">
         SELECT <include refid="DocumentColumns"/>
         FROM biz_document

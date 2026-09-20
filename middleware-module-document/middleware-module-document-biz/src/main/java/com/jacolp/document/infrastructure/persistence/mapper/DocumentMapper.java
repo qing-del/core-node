@@ -20,6 +20,9 @@ public interface DocumentMapper {
     /** 按主键读取活跃文档；资源级访问由调用方统一校验。 */
     DocumentDO selectActiveById(@Param("id") Long id);
 
+    /** 批量读取正常文档，用于管理员在对象存储写操作前完成全量前置校验。 */
+    List<DocumentDO> selectActiveByIds(@Param("ids") List<Long> ids);
+
     /** 按主键游标读取全部文档，供一次性历史迁移稳定遍历。 */
     List<DocumentDO> selectByIdAfter(@Param("afterId") Long afterId, @Param("limit") Integer limit);
 
