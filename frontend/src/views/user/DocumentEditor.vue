@@ -13,9 +13,13 @@ import {
   CircleAlert,
   Cloud,
   FilePlus2,
+  Heading1,
+  Heading2,
+  Heading3,
   Italic,
   Link2,
   List,
+  ListOrdered,
   Loader2,
   RefreshCw,
   Redo2,
@@ -875,10 +879,10 @@ function runEditorCommand(command: () => boolean): void {
 }
 
 /** 从 Tiptap 当前 selection 读取格式状态，驱动工具栏 active 样式刷新。 */
-function isActive(name: string): boolean {
+function isActive(name: string, attributes?: Record<string, unknown>): boolean {
   // Tiptap 的更新不在 Vue 响应式系统内；读取该计数器能让每次编辑事务都刷新工具栏格式状态。
   void editorVersion.value
-  return editor?.isActive(name) ?? false
+  return editor?.isActive(name, attributes) ?? false
 }
 
 /** 清理当前文档引用候选和选中状态，避免路由切换复用旧文档的 UI。 */
@@ -1180,9 +1184,14 @@ onUnmounted(() => {
           <button type="button" title="撤销" :disabled="!canUndo" @click="runEditorCommand(() => editor?.chain().focus().undo().run() ?? false)"><Undo2 class="h-4 w-4" /></button>
           <button type="button" title="重做" :disabled="!canRedo" @click="runEditorCommand(() => editor?.chain().focus().redo().run() ?? false)"><Redo2 class="h-4 w-4" /></button>
           <span class="toolbar-separator" />
+          <button type="button" title="一级标题" :aria-pressed="isActive('heading', { level: 1 })" :class="{ active: isActive('heading', { level: 1 }) }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleHeading({ level: 1 }).run() ?? false)"><Heading1 class="h-4 w-4" /></button>
+          <button type="button" title="二级标题" :aria-pressed="isActive('heading', { level: 2 })" :class="{ active: isActive('heading', { level: 2 }) }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleHeading({ level: 2 }).run() ?? false)"><Heading2 class="h-4 w-4" /></button>
+          <button type="button" title="三级标题" :aria-pressed="isActive('heading', { level: 3 })" :class="{ active: isActive('heading', { level: 3 }) }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleHeading({ level: 3 }).run() ?? false)"><Heading3 class="h-4 w-4" /></button>
+          <span class="toolbar-separator" />
           <button type="button" title="加粗" :class="{ active: isActive('bold') }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleBold().run() ?? false)"><Bold class="h-4 w-4" /></button>
           <button type="button" title="斜体" :class="{ active: isActive('italic') }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleItalic().run() ?? false)"><Italic class="h-4 w-4" /></button>
           <button type="button" title="项目列表" :class="{ active: isActive('bulletList') }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleBulletList().run() ?? false)"><List class="h-4 w-4" /></button>
+          <button type="button" title="编号列表" :aria-pressed="isActive('orderedList')" :class="{ active: isActive('orderedList') }" :disabled="!editorCanEdit" @click="runEditorCommand(() => editor?.chain().focus().toggleOrderedList().run() ?? false)"><ListOrdered class="h-4 w-4" /></button>
           <span class="toolbar-separator" />
           <template v-if="selectedResourceReference">
             <button type="button" title="解绑当前引用" :disabled="!editorCanEdit" @click="unbindSelectedDocumentReference"><Unlink2 class="h-4 w-4" /><span>解绑</span></button>
