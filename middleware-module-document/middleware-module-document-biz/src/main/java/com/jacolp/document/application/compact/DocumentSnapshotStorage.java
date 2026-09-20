@@ -2,8 +2,10 @@ package com.jacolp.document.application.compact;
 
 import com.jacolp.document.config.DocumentProperties;
 import com.jacolp.framework.minio.MinioBucketResolver;
+import com.jacolp.framework.minio.MinioObjectSummary;
 import com.jacolp.framework.minio.MinioObjectStorage;
 import com.jacolp.framework.minio.MinioStorageException;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -74,6 +76,26 @@ public class DocumentSnapshotStorage {
             throw exception;
         } catch (MinioStorageException exception) {
             throw new DocumentSnapshotStorageException("could not delete document snapshot", exception);
+        }
+    }
+
+    /** 列出一篇文档不再被当前快照指针引用的历史或孤儿快照对象。 */
+    public List<MinioObjectSummary> listHistorical(long documentId, String currentObjectKey) {
+        if (documentId <= 0) {
+            throw new IllegalArgumentException("documentId must be positive");
+        }
+        String prefix = "document/%d/state/".formatted(documentId);
+        try {
+            return minioObjectStorage.listByPrefix(bucket(), prefix).stream()
+                    // 对象存储适配层保持通用；文档模块在边界再次收紧可清理路径。
+                    .filter(summary -> summary.objectKey().startsWith(prefix)
+                            && summary.objectKey().endsWith(".bin"))
+                    .filter(summary -> !summary.objectKey().equals(currentObjectKey))
+                    .toList();
+        } catch (DocumentSnapshotStorageException exception) {
+            throw exception;
+        } catch (MinioStorageException exception) {
+            throw new DocumentSnapshotStorageException("could not list document snapshots", exception);
         }
     }
 

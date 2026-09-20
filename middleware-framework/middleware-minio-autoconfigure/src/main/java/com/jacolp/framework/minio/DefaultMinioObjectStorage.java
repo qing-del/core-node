@@ -2,15 +2,20 @@ package com.jacolp.framework.minio;
 
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
+import io.minio.ListObjectsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.Result;
 import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
+import io.minio.messages.Item;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 final class DefaultMinioObjectStorage implements MinioObjectStorage {
@@ -55,6 +60,26 @@ final class DefaultMinioObjectStorage implements MinioObjectStorage {
                     .build());
         } catch (Exception exception) {
             throw new MinioStorageException("could not write MinIO object", exception);
+        }
+    }
+
+    /** 不读取对象正文地枚举一个调用方已限定好的对象前缀。 */
+    @Override
+    public List<MinioObjectSummary> listByPrefix(String bucket, String prefix) {
+        validateLocation(bucket, prefix);
+        try {
+            List<MinioObjectSummary> summaries = new ArrayList<>();
+            Iterable<Result<Item>> objects = minioClient.listObjects(ListObjectsArgs.builder()
+                    .bucket(bucket).prefix(prefix).recursive(true).build());
+            for (Result<Item> object : objects) {
+                Item item = object.get();
+                summaries.add(new MinioObjectSummary(item.objectName(), item.size()));
+            }
+            return List.copyOf(summaries);
+        } catch (MinioStorageException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new MinioStorageException("could not list MinIO objects", exception);
         }
     }
 

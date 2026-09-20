@@ -1,5 +1,7 @@
 package com.jacolp.framework.minio;
 
+import java.util.List;
+
 /**
  * Common byte-oriented MinIO operations for modules that do not need direct SDK access.
  *
@@ -13,6 +15,9 @@ public interface MinioObjectStorage {
 
     /** 按调用方提供的精确键存储对象；桶不存在时按需创建。 */
     void write(String bucket, String objectKey, byte[] content, String contentType);
+
+    /** 枚举指定前缀下的对象键和精确对象大小，不下载对象内容。 */
+    List<MinioObjectSummary> listByPrefix(String bucket, String prefix);
 
     /** 删除调用方提供的精确对象键。 */
     void delete(String bucket, String objectKey);
