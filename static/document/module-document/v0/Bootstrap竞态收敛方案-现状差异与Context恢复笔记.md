@@ -58,8 +58,8 @@ FLUSH_LOG 采用：
 
 当前主流程位于：
 
-- `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentWebSocketHandler.java`
-- `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentBootstrapService.java`
+- `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentWebSocketHandler.java`
+- `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentBootstrapService.java`
 
 当前顺序：
 
@@ -101,9 +101,9 @@ DocumentWebSocketHandler.handleJoin
 
 主要文件：
 
-- `frontend/src/collaboration/DocumentCollaborationClient.ts`
-- `frontend/src/collaboration/documentProtocol.ts`
-- `frontend/src/views/user/DocumentEditor.vue`
+- `../../../../frontend/src/collaboration/DocumentCollaborationClient.ts`
+- `../../../../frontend/src/collaboration/documentProtocol.ts`
+- `../../../../frontend/src/views/user/DocumentEditor.vue`
 
 当前行为：
 
@@ -234,7 +234,7 @@ read Redis batch
 - `DocumentWebSocketHandlerTest`：验证 JOIN、SYNC_COMPLETE、Redis 接收后 ACK、同一连接文档隔离。
 - `DocumentFlushLogServiceTest`：验证 MySQL 写入先于 Redis 删除，以及数据库失败时保留 Redis。
 - `DocumentCompactServiceTest`：验证 immutable Snapshot、CAS loser 和日志清理失败语义。
-- `services/yjs-merge-service/src/test`：验证 Yjs 重复更新、乱序更新和 Snapshot + 增量更新合并。
+- `../../../../services/yjs-merge-service/src/test`：验证 Yjs 重复更新、乱序更新和 Snapshot + 增量更新合并。
 
 未覆盖的关键测试：
 
@@ -273,21 +273,21 @@ Snapshot → Durable OpLog → Redis pending
 
 | 主题 | 文件 |
 | --- | --- |
-| JOIN、SYNCING/ACTIVE、实时广播入口 | `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentWebSocketHandler.java` |
-| Bootstrap 当前读取顺序 | `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentBootstrapService.java` |
-| Session 状态 | `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentSessionContext.java` |
-| Room 广播 | `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentRoom.java` |
-| Redis Stream | `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/infrastructure/redis/DocumentRedisRepository.java` |
-| FLUSH_LOG | `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/application/flush/DocumentFlushLogService.java` |
-| COMPACT / Snapshot CAS | `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/application/compact/DocumentCompactService.java` |
-| Snapshot MinIO 读写 | `middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/application/compact/DocumentSnapshotStorage.java` |
-| OpLog 查询 SQL | `middleware-module-document/middleware-module-document-biz/src/main/resources/mapper/document/DocumentOpLogMapper.xml` |
-| Document Meta / Snapshot 指针 SQL | `middleware-module-document/middleware-module-document-biz/src/main/resources/mapper/document/DocumentMapper.xml` |
-| 前端协作状态和 Yjs 帧处理 | `frontend/src/collaboration/DocumentCollaborationClient.ts` |
-| 前端协议帧定义 | `frontend/src/collaboration/documentProtocol.ts` |
-| Bootstrap 当前单测 | `middleware-module-document/middleware-module-document-biz/src/test/java/com/jacolp/document/websocket/DocumentBootstrapServiceTest.java` |
-| COMPACT 当前单测 | `middleware-module-document/middleware-module-document-biz/src/test/java/com/jacolp/document/application/compact/DocumentCompactServiceTest.java` |
-| FLUSH 当前单测 | `middleware-module-document/middleware-module-document-biz/src/test/java/com/jacolp/document/application/flush/DocumentFlushLogServiceTest.java` |
+| JOIN、SYNCING/ACTIVE、实时广播入口 | `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentWebSocketHandler.java` |
+| Bootstrap 当前读取顺序 | `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentBootstrapService.java` |
+| Session 状态 | `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentSessionContext.java` |
+| Room 广播 | `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/websocket/DocumentRoom.java` |
+| Redis Stream | `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/infrastructure/redis/DocumentRedisRepository.java` |
+| FLUSH_LOG | `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/application/flush/DocumentFlushLogService.java` |
+| COMPACT / Snapshot CAS | `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/application/compact/DocumentCompactService.java` |
+| Snapshot MinIO 读写 | `../../../../middleware-module-document/middleware-module-document-biz/src/main/java/com/jacolp/document/application/compact/DocumentSnapshotStorage.java` |
+| OpLog 查询 SQL | `../../../../middleware-module-document/middleware-module-document-biz/src/main/resources/mapper/document/DocumentOpLogMapper.xml` |
+| Document Meta / Snapshot 指针 SQL | `../../../../middleware-module-document/middleware-module-document-biz/src/main/resources/mapper/document/DocumentMapper.xml` |
+| 前端协作状态和 Yjs 帧处理 | `../../../../frontend/src/collaboration/DocumentCollaborationClient.ts` |
+| 前端协议帧定义 | `../../../../frontend/src/collaboration/documentProtocol.ts` |
+| Bootstrap 当前单测 | `../../../../middleware-module-document/middleware-module-document-biz/src/test/java/com/jacolp/document/websocket/DocumentBootstrapServiceTest.java` |
+| COMPACT 当前单测 | `../../../../middleware-module-document/middleware-module-document-biz/src/test/java/com/jacolp/document/application/compact/DocumentCompactServiceTest.java` |
+| FLUSH 当前单测 | `../../../../middleware-module-document/middleware-module-document-biz/src/test/java/com/jacolp/document/application/flush/DocumentFlushLogServiceTest.java` |
 
 ## 当前结论
 
@@ -398,7 +398,7 @@ Commit 4：已提交 d45129da
 - 后端：一个新会话停留在 `SYNCING` 时，另一个 ACTIVE 会话产生的 Update 必须能被新会话收到；新会话在 Bootstrap 完成前发送 CLIENT_UPDATE 仍应被拒绝。
 - Bootstrap：使用调用顺序测试验证 Redis 先于 Meta；使用事务回调验证 Meta 与 OpLog 分页在同一事务中。
 - 并发：最终需要补充 JOIN Bootstrap 与 COMPACT CAS/日志删除并发场景，验证旧 ReadView 仍能读到其对应的 OpLog。
-- 当前 `frontend/package.json` 没有自动化测试脚本，前端每个 commit 至少执行 `npm run build`；若引入测试运行器，另行作为独立基础设施 commit，不混入恢复逻辑。
+- 当前 `../../../../frontend/package.json` 没有自动化测试脚本，前端每个 commit 至少执行 `npm run build`；若引入测试运行器，另行作为独立基础设施 commit，不混入恢复逻辑。
 
 ### 当前执行日志
 
@@ -414,7 +414,7 @@ Commit 4：已提交 d45129da
 
 ### 前端
 
-`frontend/src/collaboration/DocumentCollaborationClient.ts` 当前维护三类不同语义的缓存：
+`../../../../frontend/src/collaboration/DocumentCollaborationClient.ts` 当前维护三类不同语义的缓存：
 
 ```text
 pendingUpdates
