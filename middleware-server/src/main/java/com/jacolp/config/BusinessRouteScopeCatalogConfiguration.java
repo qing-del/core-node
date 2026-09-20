@@ -137,7 +137,9 @@ public class BusinessRouteScopeCatalogConfiguration {
                 admin("POST /admin/email/send account:manage"), admin("POST /admin/user/list account:read"),
                 admin("PUT /admin/user/user account:manage"), admin("POST /admin/user/user account:manage"),
                 admin("DELETE /admin/user/user account:manage"), admin("POST /admin/user/status/{status} account:manage"),
-                admin("GET /admin/user/user account:read"), admin("GET /admin/user/me account:read")
+                admin("GET /admin/user/user account:read"), admin("GET /admin/user/me account:read"),
+                // admin collaborative documents
+                admin("GET /admin/document document:read")
         );
     }
 

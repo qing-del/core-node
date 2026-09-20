@@ -3,8 +3,8 @@
 ## 状态与适用范围
 
 这是 Phase 5 首发的、可执行的 route-to-scope 目录。Phase 6 删除旧四个登录/登出
-路由后，当前存在 133 个 `@RestController` 下的 `/user/**` 与 `/admin/**` 最终 HTTP
-路由：88 个 user 路由、45 个 admin 路由；其中 129 个是 bearer 业务路由、4 个是下文明确排除的
+路由后，当前存在 134 个 `@RestController` 下的 `/user/**` 与 `/admin/**` 最终 HTTP
+路由：88 个 user 路由、46 个 admin 路由；其中 130 个是 bearer 业务路由、4 个是下文明确排除的
 legacy/public/activation 例外。认证完成后，每个业务路由都必须满足本表的 required scope；除明确标注为“any-of”的路由外，required scope 均为 all-of。scope 的 wildcard 匹配由统一 matcher 完成，签发 JWT 时不展开。
 
 本目录的权限名空间固定为：
@@ -139,7 +139,7 @@ OAuth 协议端点不属于本目录，继续使用 RFC OAuth 错误格式，不
 `POST /user/user/active-code`。它们保持既有 activation 协议；因此表内 bearer
 业务条目为 84 条，`/user/**` 源码 endpoint 总数为 88。
 
-## `/admin/**`：admin client（45 bearer routes）
+## `/admin/**`：admin client（46 bearer routes）
 
 | # | method + path | required scopes（all-of） | 业务语义 |
 | ---: | --- | --- | --- |
@@ -188,8 +188,9 @@ OAuth 协议端点不属于本目录，继续使用 RFC OAuth 错误格式，不
 | 43 | `POST /admin/user/status/{status}` | `account:manage` | 改用户状态；rank 另行校验 |
 | 44 | `GET /admin/user/user` | `account:read` | 读取用户 |
 | 45 | `GET /admin/user/me` | `account:read` | 读取当前管理员资料 |
+| 46 | `GET /admin/document` | `document:read` | 按用户分组查询正常协作文档目录 |
 
-admin bearer 业务条目为 45 条，且 `/admin/**` 源码 endpoint 总数同为 45。
+admin bearer 业务条目为 46 条，且 `/admin/**` 源码 endpoint 总数同为 46。
 
 ## 数据与签发约束
 
@@ -200,7 +201,7 @@ code（`*:read`、`*:write`、`*:manage`、`*:super`）作为 RBAC 兼容数据�
 ADMIN 通过 rank 继承 USER 并拥有 `*:manage`，CREATOR 继承并拥有 `*:super`。
 
 `user` client 的 scope/auto-approve 是六资源的 `read,write`；`admin` client 的
-scope/auto-approve 是五资源的 `read,manage`，`*:super` 不得 auto-approve。`core_agent`
+scope/auto-approve 包含 account、audio、audit、media、note 的 `read,manage` 及 document 的 `read,write`，`*:super` 不得 auto-approve。`core_agent`
 保持其既有 `note:read,note:write,sys:read,media:read` 范围，但按上文继续拒绝旧业务
 路由。所有变更仍通过“角色有效权限 ∩ client scopes ∩ request scopes（未传则
 auto-approve）”计算。

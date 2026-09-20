@@ -49,4 +49,19 @@ class DocumentMapperXmlTest {
                 .contains("ORDER BY id ASC")
                 .contains("LIMIT #{limit}");
     }
+
+    @Test
+    void adminDocumentTreeQueryShouldOnlyReturnActiveDocumentsInStableTreeOrder() throws IOException {
+        String xml;
+        try (InputStream stream = getClass().getClassLoader()
+                .getResourceAsStream("mapper/document/DocumentMapper.xml")) {
+            xml = new String(Objects.requireNonNull(stream, "mapper XML must be on the test classpath").readAllBytes(),
+                    StandardCharsets.UTF_8);
+        }
+
+        assertThat(xml)
+                .contains("id=\"listActiveForAdmin\"")
+                .contains("WHERE deleted = 0")
+                .contains("ORDER BY owner_user_id ASC, last_modify_time DESC, id DESC");
+    }
 }

@@ -30,6 +30,7 @@ class BusinessRouteScopeCatalogConfigurationTest {
             "com.jacolp.audio.controller.user.AudioController",
             "com.jacolp.audit.application.controller.admin.AuditController",
             "com.jacolp.audit.application.controller.admin.ImageAuditReviewCompatibilityController",
+            "com.jacolp.document.controller.AdminDocumentController",
             "com.jacolp.document.controller.DocumentController",
             "com.jacolp.document.controller.DocumentShareLinkRedemptionController",
             "com.jacolp.document.controller.FileIndexCompletionController",
@@ -59,11 +60,11 @@ class BusinessRouteScopeCatalogConfigurationTest {
         Map<String, Long> policyRoutes = BusinessRouteScopeCatalogConfiguration.entries().stream()
                 .collect(Collectors.groupingBy(BusinessRouteScopeCatalogConfigurationTest::route, Collectors.counting()));
 
-        assertThat(mappedRoutes).hasSize(133);
+        assertThat(mappedRoutes).hasSize(134);
         assertThat(mappedRoutes).containsAll(EXCEPTIONS);
         assertThat(EXCEPTIONS).hasSize(4);
-        assertThat(protectedRoutes).hasSize(129);
-        assertThat(policyRoutes).hasSize(129);
+        assertThat(protectedRoutes).hasSize(130);
+        assertThat(policyRoutes).hasSize(130);
         assertThat(policyRoutes.keySet()).containsExactlyInAnyOrderElementsOf(protectedRoutes);
         assertThat(policyRoutes.values()).allMatch(count -> count == 1L);
     }
@@ -101,8 +102,8 @@ class BusinessRouteScopeCatalogConfigurationTest {
         assertThat(document.lines().filter(line -> line.startsWith("## `/user/**`")).toList())
                 .containsExactly("## `/user/**`：user client（84 bearer routes）");
         assertThat(document.lines().filter(line -> line.startsWith("## `/admin/**`")).toList())
-                .containsExactly("## `/admin/**`：admin client（45 bearer routes）");
-        assertThat(document).contains("133 个", "88 个 user", "45 个 admin", "129 个是 bearer", "4 个是下文明确排除");
+                .containsExactly("## `/admin/**`：admin client（46 bearer routes）");
+        assertThat(document).contains("134 个", "88 个 user", "46 个 admin", "130 个是 bearer", "4 个是下文明确排除");
         assertThat(document).contains("`GET /user/note/source/{id}`", "`audit:write`", "`audit:manage`",
                 "`note:read` + `media:read`", "`note:write` + `media:read`", "`document:read`",
                 "`document:write`", "`GET /user/document/{documentId}/users`",

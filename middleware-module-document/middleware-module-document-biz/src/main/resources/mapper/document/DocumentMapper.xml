@@ -78,6 +78,13 @@
         ORDER BY d.last_modify_time DESC, d.id DESC
     </select>
 
+    <select id="listActiveForAdmin" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE deleted = 0
+        ORDER BY owner_user_id ASC, last_modify_time DESC, id DESC
+    </select>
+
     <update id="updateLastModificationIfActive">
         UPDATE biz_document
         SET last_modify_time = #{lastModifyTime},

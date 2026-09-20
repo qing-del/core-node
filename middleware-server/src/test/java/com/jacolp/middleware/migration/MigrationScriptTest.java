@@ -69,7 +69,7 @@ class MigrationScriptTest {
         String phaseFiveUserScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,media:read,media:write,note:read,note:write";
         String bootstrapUserScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,"
                 + "document:read,document:write,media:read,media:write,note:read,note:write";
-        String adminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,media:read,media:manage,note:read,note:manage";
+        String adminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,document:read,document:write,media:read,media:manage,note:read,note:manage";
 
         assertThat(migration)
                 .contains("phase5_business_route_scopes_preflight")
@@ -194,6 +194,19 @@ class MigrationScriptTest {
                 .contains(userScopes)
                 .contains("v_document_permission_count <> 2")
                 .contains("v_user_client_count <> 1");
+    }
+
+    @Test
+    void adminDocumentScopesShouldBeEnabledForTheInternalAdminClient() throws IOException {
+        String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
+        String migration = readMigration("20260920_admin_document_oauth_scopes.sql");
+        String adminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,"
+                + "document:read,document:write,media:read,media:manage,note:read,note:manage";
+
+        assertThat(bootstrap).contains(adminScopes);
+        assertThat(migration)
+                .contains("BINARY `client_id` = 'admin'")
+                .contains(adminScopes);
     }
 
     private static String readMigration(String fileName) throws IOException {

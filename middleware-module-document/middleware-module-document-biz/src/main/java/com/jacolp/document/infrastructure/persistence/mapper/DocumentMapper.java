@@ -29,6 +29,9 @@ public interface DocumentMapper {
     /** 列出当前用户作为所有者或被授予有效 READ/WRITE 权限的活跃文档。 */
     List<DocumentDO> listActiveVisibleByUserId(@Param("userId") Long userId);
 
+    /** 供管理员按所有者分组列出全部正常文档；排序保证树形响应稳定。 */
+    List<DocumentDO> listActiveForAdmin();
+
     /** 在文档仍活跃且调用方仍拥有写权限时更新最后修改审计字段。 */
     int updateLastModificationIfActive(@Param("id") Long id, @Param("userId") Long userId,
                                        @Param("lastModifyTime") LocalDateTime lastModifyTime,
