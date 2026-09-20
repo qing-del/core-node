@@ -140,7 +140,7 @@ public class BusinessRouteScopeCatalogConfiguration {
                 admin("GET /admin/user/user account:read"), admin("GET /admin/user/me account:read"),
                 // admin collaborative documents
                 admin("GET /admin/document document:read"),
-                admin("POST /admin/document/snapshot-history/clear document:write")
+                admin("POST /admin/document/snapshot-history/clear document:manage")
         );
     }
 

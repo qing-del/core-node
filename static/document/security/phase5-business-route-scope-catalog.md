@@ -189,7 +189,7 @@ OAuth 协议端点不属于本目录，继续使用 RFC OAuth 错误格式，不
 | 44 | `GET /admin/user/user` | `account:read` | 读取用户 |
 | 45 | `GET /admin/user/me` | `account:read` | 读取当前管理员资料 |
 | 46 | `GET /admin/document` | `document:read` | 按用户分组查询正常协作文档目录 |
-| 47 | `POST /admin/document/snapshot-history/clear` | `document:write` | 批量清理任意正常协作文档的历史快照 |
+| 47 | `POST /admin/document/snapshot-history/clear` | `document:manage` | 批量清理任意正常协作文档的历史快照 |
 
 admin bearer 业务条目为 47 条，且 `/admin/**` 源码 endpoint 总数同为 47。
 

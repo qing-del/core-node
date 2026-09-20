@@ -93,6 +93,17 @@ class BusinessRouteScopeCatalogConfigurationTest {
     }
 
     @Test
+    void adminSnapshotHistoryClearRouteRequiresDocumentManageScope() {
+        BusinessRouteAuthorizationEntry entry = BusinessRouteScopeCatalogConfiguration.entries().stream()
+                .filter(candidate -> candidate.method() == HttpMethod.POST
+                        && candidate.pathPattern().equals("/admin/document/snapshot-history/clear"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(entry.anyRequiredScope()).isFalse();
+        assertThat(entry.requiredScopes()).containsExactly("document:manage");
+    }
+
+    @Test
     void documentationMatchesTheExecutableCatalogueCountsAndCoreScopeRules() throws IOException {
         String document = Files.readString(repositoryRoot().resolve(
                 "static/document/security/phase5-business-route-scope-catalog.md"));
