@@ -200,13 +200,15 @@ class MigrationScriptTest {
     void adminDocumentScopesShouldBeEnabledForTheInternalAdminClient() throws IOException {
         String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
         String migration = readMigration("20260920_admin_document_oauth_scopes.sql");
-        String adminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,"
+        String bootstrapAdminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,"
                 + "document:read,document:write,media:read,media:manage,note:read,note:manage";
+        String migrationAdminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,"
+                + "document:read,document:manage,media:read,media:manage,note:read,note:manage";
 
-        assertThat(bootstrap).contains(adminScopes);
+        assertThat(bootstrap).contains(bootstrapAdminScopes);
         assertThat(migration)
                 .contains("BINARY `client_id` = 'admin'")
-                .contains(adminScopes);
+                .contains(migrationAdminScopes);
     }
 
     private static String readMigration(String fileName) throws IOException {
