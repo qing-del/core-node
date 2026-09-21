@@ -28,6 +28,7 @@ class BusinessRouteScopeCatalogConfigurationTest {
     private static final List<String> CONTROLLERS = List.of(
             "com.jacolp.audio.controller.admin.AudioController",
             "com.jacolp.audio.controller.user.AudioController",
+            "com.jacolp.agent.controller.user.AgentChatController",
             "com.jacolp.audit.application.controller.admin.AuditController",
             "com.jacolp.audit.application.controller.admin.ImageAuditReviewCompatibilityController",
             "com.jacolp.document.controller.AdminDocumentController",
@@ -60,11 +61,11 @@ class BusinessRouteScopeCatalogConfigurationTest {
         Map<String, Long> policyRoutes = BusinessRouteScopeCatalogConfiguration.entries().stream()
                 .collect(Collectors.groupingBy(BusinessRouteScopeCatalogConfigurationTest::route, Collectors.counting()));
 
-        assertThat(mappedRoutes).hasSize(135);
+        assertThat(mappedRoutes).hasSize(136);
         assertThat(mappedRoutes).containsAll(EXCEPTIONS);
         assertThat(EXCEPTIONS).hasSize(4);
-        assertThat(protectedRoutes).hasSize(131);
-        assertThat(policyRoutes).hasSize(131);
+        assertThat(protectedRoutes).hasSize(132);
+        assertThat(policyRoutes).hasSize(132);
         assertThat(policyRoutes.keySet()).containsExactlyInAnyOrderElementsOf(protectedRoutes);
         assertThat(policyRoutes.values()).allMatch(count -> count == 1L);
     }
@@ -78,6 +79,17 @@ class BusinessRouteScopeCatalogConfigurationTest {
                 .orElseThrow();
         assertThat(entry.anyRequiredScope()).isTrue();
         assertThat(entry.requiredScopes()).containsExactlyInAnyOrder("document:read", "document:write");
+    }
+
+    @Test
+    void agentChatRouteRequiresTheDedicatedAgentChatScope() {
+        BusinessRouteAuthorizationEntry entry = BusinessRouteScopeCatalogConfiguration.entries().stream()
+                .filter(candidate -> candidate.method() == HttpMethod.POST
+                        && candidate.pathPattern().equals("/user/agent/chat"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(entry.anyRequiredScope()).isFalse();
+        assertThat(entry.requiredScopes()).containsExactly("agent:chat");
     }
 
     @Test

@@ -177,7 +177,8 @@ class BusinessRouteResourceServerSecurityConfigurationTest {
         RequestMatcher matcher = catalogue.businessRouteRequestMatcher();
         RequestMatcher resourceServerMatcher = catalogue.businessResourceServerRequestMatcher(matcher,
                 catalogue.internalLogoutRequestMatcher());
-        assertThat(matcher.matches(request(HttpMethod.GET, "/user/note/9"))).isTrue();
+            assertThat(matcher.matches(request(HttpMethod.GET, "/user/note/9"))).isTrue();
+            assertThat(matcher.matches(request(HttpMethod.POST, "/user/agent/chat"))).isTrue();
         assertThat(matcher.matches(request(HttpMethod.PUT, "/admin/user/user"))).isTrue();
         assertThat(matcher.matches(request(HttpMethod.POST, "/auth/logout"))).isFalse();
         assertThat(resourceServerMatcher.matches(request(HttpMethod.POST, "/auth/logout"))).isTrue();
@@ -209,12 +210,18 @@ class BusinessRouteResourceServerSecurityConfigurationTest {
                     .andExpect(status().isOk()).andExpect(content().string("42:false"));
             mvc.perform(post("/auth/logout").header("Authorization", "Bearer admin-creator"))
                     .andExpect(status().isOk()).andExpect(content().string("42:true"));
+            mvc.perform(post("/user/agent/chat").header("Authorization", "Bearer user-agent-chat"))
+                    .andExpect(status().isOk()).andExpect(content().string("agent"));
 
             mvc.perform(get("/user/note/9").header("Authorization", "Bearer core-agent"))
                     .andExpect(status().isForbidden()).andExpect(content().string(org.hamcrest.Matchers.containsString("无权访问")));
             mvc.perform(get("/user/note/9").header("Authorization", "Bearer user-no-scope"))
                     .andExpect(status().isForbidden());
             mvc.perform(put("/admin/user/user").header("Authorization", "Bearer user-manage"))
+                    .andExpect(status().isForbidden());
+            mvc.perform(post("/user/agent/chat").header("Authorization", "Bearer user-no-scope"))
+                    .andExpect(status().isForbidden());
+            mvc.perform(post("/user/agent/chat").header("Authorization", "Bearer core-agent-chat"))
                     .andExpect(status().isForbidden());
             mvc.perform(post("/auth/logout").header("Authorization", "Bearer core-agent"))
                     .andExpect(status().isForbidden());
@@ -294,9 +301,11 @@ class BusinessRouteResourceServerSecurityConfigurationTest {
                 case "user-wildcard" -> jwt("user", "USER", List.of("*:read")).build();
                 case "user-creator" -> jwt("user", "CREATOR", List.of("note:read")).build();
                 case "user-no-scope" -> jwt("user", "USER", List.of("media:read")).build();
+                case "user-agent-chat" -> jwt("user", "USER", List.of("agent:chat")).build();
                 case "user-manage" -> jwt("user", "USER", List.of("*:manage")).build();
                 case "admin-creator" -> jwt("admin", "CREATOR", List.of("account:manage")).build();
                 case "core-agent" -> jwt("core_agent", "USER", List.of("note:read")).build();
+                case "core-agent-chat" -> jwt("core_agent", "USER", List.of("agent:chat")).build();
                 default -> throw new BadJwtException("unknown token");
             };
         }
@@ -403,6 +412,11 @@ class BusinessRouteResourceServerSecurityConfigurationTest {
         @PostMapping("/user/user/active-code")
         String activation() {
             return "activation";
+        }
+
+        @PostMapping("/user/agent/chat")
+        String agentChat() {
+            return "agent";
         }
 
         @PostMapping("/oauth/token")

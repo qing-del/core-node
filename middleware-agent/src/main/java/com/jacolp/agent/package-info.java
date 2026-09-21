@@ -1,6 +1,6 @@
 /**
- * Boundary for conversational AI capabilities.
+ * Conversational AI capabilities.
  *
- * <p>This module intentionally starts without configuration, controllers, or business behavior.</p>
+ * <p>The initial capability is stateless, text-only chat.</p>
  */
 package com.jacolp.agent;

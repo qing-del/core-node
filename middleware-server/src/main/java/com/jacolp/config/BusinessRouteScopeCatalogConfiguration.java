@@ -62,6 +62,8 @@ public class BusinessRouteScopeCatalogConfiguration {
                 user("POST /user/audio/generate audio:write"), user("POST /user/audio/retry/{taskId} audio:write"),
                 user("GET /user/audio/status/{taskId} audio:read"), user("POST /user/audio/list audio:read"),
                 user("POST /user/audio/cancel/{taskId} audio:write"), user("DELETE /user/audio/{taskId} audio:write"),
+                // user agent
+                user("POST /user/agent/chat agent:chat"),
                 // user audit and media
                 user("POST /user/audit/image/submitAudit audit:write"), user("POST /user/audit/image/cancelAudit audit:write"),
                 user("POST /user/image/list media:read"), user("GET /user/image/overview media:read"),
