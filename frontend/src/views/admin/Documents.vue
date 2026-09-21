@@ -6,12 +6,13 @@ import {
 } from '@/api/admin'
 import {
   buildSnapshotCleanupSummary,
+  canManageDocumentSnapshotHistory,
   expandedOwnerIdsForSearch,
   filterAdminDocumentTree,
   uniqueDocumentIds
 } from '@/utils/adminDocument'
 import { alertSuccess, alertWarning, confirmAction, toastError } from '@/utils/feedback'
-import { hasGrantedScope, readAuthSession } from '@/utils/authSession'
+import { readAuthSession } from '@/utils/authSession'
 import {
   Check, ChevronDown, ChevronRight, DatabaseZap, FileText,
   FolderTree, HardDrive, Loader2, RefreshCw, Search, Trash2, UserRound, X
@@ -25,7 +26,7 @@ const expandedUserIds = ref<Set<number>>(new Set())
 const selectedDocumentIds = ref<Set<number>>(new Set())
 
 const canClearSnapshotHistory = computed(() =>
-  hasGrantedScope(readAuthSession().scopes, 'document:write')
+  canManageDocumentSnapshotHistory(readAuthSession().scopes)
 )
 const filteredTree = computed(() => filterAdminDocumentTree(tree.value, keyword.value))
 const selectedCount = computed(() => selectedDocumentIds.value.size)

@@ -2,6 +2,12 @@ import type {
   AdminDocumentTreeNode,
   AdminSnapshotHistoryClearResponse
 } from '../api/admin.ts'
+import { hasGrantedScope } from './authSession.ts'
+
+/** 清理任意文档的历史快照需要独立的管理员维护权限。 */
+export function canManageDocumentSnapshotHistory(scopes: readonly string[]): boolean {
+  return hasGrantedScope(scopes, 'document:manage')
+}
 
 /** 按所有者或文档字段过滤服务端返回的目录树，保持原始顺序和层级。 */
 export function filterAdminDocumentTree(

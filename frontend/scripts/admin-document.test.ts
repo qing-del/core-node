@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildSnapshotCleanupSummary,
+  canManageDocumentSnapshotHistory,
   expandedOwnerIdsForSearch,
   filterAdminDocumentTree,
   uniqueDocumentIds
@@ -41,6 +42,12 @@ test('expands every matching owner while a search is active', () => {
 
 test('deduplicates valid batch document ids in their original order', () => {
   assert.deepEqual(uniqueDocumentIds([12, 11, 12, 0, -1, Number.NaN, 21]), [12, 11, 21])
+})
+
+test('requires document:manage, including wildcard grants, to clear snapshot history', () => {
+  assert.equal(canManageDocumentSnapshotHistory(['document:write']), false)
+  assert.equal(canManageDocumentSnapshotHistory(['document:manage']), true)
+  assert.equal(canManageDocumentSnapshotHistory(['document:*']), true)
 })
 
 test('summarizes complete and zero-deletion cleanup accurately', () => {
