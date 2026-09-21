@@ -36,6 +36,10 @@
             <groupId>com.jacolp</groupId>
             <artifactId>middleware-common-web</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.jacolp</groupId>
+            <artifactId>middleware-agent</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>com.jacolp</groupId>

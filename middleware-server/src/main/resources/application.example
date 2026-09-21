@@ -21,6 +21,19 @@ spring:
   #   active: ${SPRING_PROFILES_ACTIVE:home}
   application:
     name: middleware-server
+  ai:
+    model:
+      chat: openai
+    # OpenAI-compatible services such as DeepSeek can override the base URL.
+    openai:
+      base-url: ${AI_OPENAI_BASE_URL:https://api.openai.com}
+      api-key: ${AI_OPENAI_API_KEY:CHANGE_ME}
+      chat:
+        model: ${AI_OPENAI_CHAT_MODEL:CHANGE_ME}
+    chat:
+      client:
+        tool-calling:
+          enabled: false
   datasource:
     url: jdbc:mysql://${jacolp.datasource.host}:${jacolp.datasource.port}/${jacolp.datasource.database}
     username: ${jacolp.datasource.username}

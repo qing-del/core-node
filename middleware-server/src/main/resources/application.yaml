@@ -3,6 +3,18 @@ spring:
     active: home
   application:
     name: middleware-server
+  ai:
+    model:
+      chat: openai
+    openai:
+      base-url: ${AI_OPENAI_BASE_URL:https://api.openai.com}
+      api-key: ${AI_OPENAI_API_KEY}
+      chat:
+        model: ${AI_OPENAI_CHAT_MODEL}
+    chat:
+      client:
+        tool-calling:
+          enabled: false
   datasource:
     url: jdbc:mysql://${jacolp.datasource.host}:${jacolp.datasource.port}/${jacolp.datasource.database}
     username: ${jacolp.datasource.username}

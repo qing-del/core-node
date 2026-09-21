@@ -12,6 +12,7 @@
 
     <properties>
         <spring-boot.version>4.0.5</spring-boot.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
         <middleware.version>0.0.1-SNAPSHOT</middleware.version>
         <mybatis.version>4.0.1</mybatis.version>
         <pagehelper.version>2.1.0</pagehelper.version>
@@ -43,6 +44,13 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -294,6 +302,11 @@
             <dependency>
                 <groupId>com.jacolp</groupId>
                 <artifactId>middleware-open-api</artifactId>
+                <version>${middleware.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jacolp</groupId>
+                <artifactId>middleware-agent</artifactId>
                 <version>${middleware.version}</version>
             </dependency>
         </dependencies>

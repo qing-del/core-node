@@ -10,4 +10,10 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>middleware-agent</artifactId>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+    </dependencies>
 </project>

@@ -45,6 +45,8 @@ class ContainerHealthcheckContractTest {
                 .contains("COPY middleware-module-document/pom.xml")
                 .contains("COPY middleware-module-document/middleware-module-document-api/pom.xml")
                 .contains("COPY middleware-module-document/middleware-module-document-biz/pom.xml")
+                .contains("COPY middleware-open-api/pom.xml")
+                .contains("COPY middleware-agent/pom.xml")
                 .contains("RUN mvn dependency:go-offline -B");
     }
 

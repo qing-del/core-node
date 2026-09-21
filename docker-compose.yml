@@ -99,6 +99,9 @@ services:
       jacolp.admin.username: ${JACOLP_ADMIN_USERNAME:-admin}
       jacolp.admin.password: ${JACOLP_ADMIN_PASSWORD}
       jacolp.admin.email: ${JACOLP_ADMIN_EMAIL:-admin@example.com}
+      AI_OPENAI_BASE_URL: ${AI_OPENAI_BASE_URL:-https://api.openai.com}
+      AI_OPENAI_API_KEY: ${AI_OPENAI_API_KEY:?Set AI_OPENAI_API_KEY for agent chat}
+      AI_OPENAI_CHAT_MODEL: ${AI_OPENAI_CHAT_MODEL:?Set AI_OPENAI_CHAT_MODEL for agent chat}
       jacolp.default-password: ${JACOLP_DEFAULT_PASSWORD:-123456}
       jacolp.oauth2.rs256.issuer: ${OAUTH2_RS256_ISSUER:-core-node}
       jacolp.oauth2.rs256.audience: ${OAUTH2_RS256_AUDIENCE:-core-node-api}

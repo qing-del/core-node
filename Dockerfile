@@ -40,6 +40,8 @@ COPY middleware-module-system/middleware-module-system-biz/pom.xml middleware-mo
 COPY middleware-module-document/pom.xml middleware-module-document/
 COPY middleware-module-document/middleware-module-document-api/pom.xml middleware-module-document/middleware-module-document-api/
 COPY middleware-module-document/middleware-module-document-biz/pom.xml middleware-module-document/middleware-module-document-biz/
+COPY middleware-open-api/pom.xml middleware-open-api/
+COPY middleware-agent/pom.xml middleware-agent/
 COPY middleware-server/pom.xml middleware-server/
 
 RUN mvn dependency:go-offline -B
