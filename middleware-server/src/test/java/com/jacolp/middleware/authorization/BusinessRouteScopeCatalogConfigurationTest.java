@@ -121,18 +121,19 @@ class BusinessRouteScopeCatalogConfigurationTest {
                 "static/document/security/phase5-business-route-scope-catalog.md"));
         long documentedEntries = document.lines().filter(line -> line.matches("\\| \\d+ \\|.*")).count();
 
-        assertThat(documentedEntries).isEqualTo(129);
+        assertThat(documentedEntries).isEqualTo(130);
         assertThat(document.lines().filter(line -> line.startsWith("## `/user/**`")).toList())
-                .containsExactly("## `/user/**`：user client（84 bearer routes）");
+                .containsExactly("## `/user/**`：user client（85 bearer routes）");
         assertThat(document.lines().filter(line -> line.startsWith("## `/admin/**`")).toList())
                 .containsExactly("## `/admin/**`：admin client（47 bearer routes）");
-        assertThat(document).contains("135 个", "88 个 user", "47 个 admin", "131 个是 bearer", "4 个是下文明确排除");
+        assertThat(document).contains("136 个", "89 个 user", "47 个 admin", "132 个是 bearer", "4 个是下文明确排除");
         assertThat(document).contains("`GET /user/note/source/{id}`", "`audit:write`", "`audit:manage`",
                 "`note:read` + `media:read`", "`note:write` + `media:read`", "`document:read`",
                 "`document:write`", "`GET /user/document/{documentId}/users`",
                 "`PUT /user/document/{documentId}/users/{userId}`",
                 "`DELETE /user/document/{documentId}/users/{userId}`",
-                "`POST /user/document/share-links/{code}/redeem`", "`GET /user/file/completion`");
+                "`POST /user/document/share-links/{code}/redeem`", "`GET /user/file/completion`",
+                "`POST /user/agent/chat`", "`agent:chat`");
     }
 
     private static Set<String> mappedBusinessRoutes() throws Exception {

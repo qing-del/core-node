@@ -3,8 +3,8 @@
 ## 状态与适用范围
 
 这是 Phase 5 首发的、可执行的 route-to-scope 目录。Phase 6 删除旧四个登录/登出
-路由后，当前存在 135 个 `@RestController` 下的 `/user/**` 与 `/admin/**` 最终 HTTP
-路由：88 个 user 路由、47 个 admin 路由；其中 131 个是 bearer 业务路由、4 个是下文明确排除的
+路由后，当前存在 136 个 `@RestController` 下的 `/user/**` 与 `/admin/**` 最终 HTTP
+路由：89 个 user 路由、47 个 admin 路由；其中 132 个是 bearer 业务路由、4 个是下文明确排除的
 legacy/public/activation 例外。认证完成后，每个业务路由都必须满足本表的 required scope；除明确标注为“any-of”的路由外，required scope 均为 all-of。scope 的 wildcard 匹配由统一 matcher 完成，签发 JWT 时不展开。
 
 本目录的权限名空间固定为：
@@ -12,6 +12,7 @@ legacy/public/activation 例外。认证完成后，每个业务路由都必须�
 | resource | actions |
 | --- | --- |
 | `account` | `read`、`write`、`manage` |
+| `agent` | `chat` |
 | `note` | `read`、`write`、`manage` |
 | `media` | `read`、`write`、`manage` |
 | `audio` | `read`、`write`、`manage` |
@@ -44,7 +45,7 @@ admin 操作还会保留相应 rank/creator 业务约束。
 HTTP `403`；响应体保持既有 `Result.error` 契约。此行为在 RS256 与 legacy 模式下一致。
 OAuth 协议端点不属于本目录，继续使用 RFC OAuth 错误格式，不走业务 `Result` 错误体。
 
-## `/user/**`：user client（84 bearer routes）
+## `/user/**`：user client（85 bearer routes）
 
 | # | method + path | required scopes（all-of） | 业务语义 |
 | ---: | --- | --- | --- |
@@ -132,12 +133,13 @@ OAuth 协议端点不属于本目录，继续使用 RFC OAuth 错误格式，不
 | 82 | `GET /user/user/overview` | `account:read` | 读取 own 概览 |
 | 83 | `PUT /user/user/me` | `account:write` | 更新 own 资料/密码 |
 | 84 | `DELETE /user/user/me` | `account:write` | 删除 own 账户 |
+| 85 | `POST /user/agent/chat` | `agent:chat` | 发起一次无状态、无工具的同步 AI 聊天 |
 
 下列 4 条 `/user/**` 注册/activation 路由属于本文件开头的例外，计入源码路由
 总数但不分配 bearer required scope：`POST /user/user/register`、
 `POST /user/user/resend-activation`、`GET /user/user/active/{token}` 和
 `POST /user/user/active-code`。它们保持既有 activation 协议；因此表内 bearer
-业务条目为 84 条，`/user/**` 源码 endpoint 总数为 88。
+业务条目为 85 条，`/user/**` 源码 endpoint 总数为 89。
 
 ## `/admin/**`：admin client（47 bearer routes）
 
@@ -195,13 +197,14 @@ admin bearer 业务条目为 47 条，且 `/admin/**` 源码 endpoint 总数同�
 
 ## 数据与签发约束
 
-本目录要求 `sys_permission.code` 具备上述 17 个精确 code。保留原有 4 个 wildcard
+本目录要求 `sys_permission.code` 具备上述 18 个精确 code。保留原有 4 个 wildcard
 code（`*:read`、`*:write`、`*:manage`、`*:super`）作为 RBAC 兼容数据，matcher 可令
 其匹配精确路由 required scope；但第一方 client 的 scopes 和 auto-approve 应改为本
 目录精确 code，避免默认签发跨资源 wildcard。USER 角色可继续拥有 `*:read,*:write`，
 ADMIN 通过 rank 继承 USER 并拥有 `*:manage`，CREATOR 继承并拥有 `*:super`。
 
-`user` client 的 scope/auto-approve 是六资源的 `read,write`；`admin` client 的
+`user` client 的 scope/auto-approve 是六资源的 `read,write` 以及 `agent:chat`；该 scope
+作为 USER 的直接权限授予，避免把 `*:read` 或 `*:write` 扩展为任意 action。`admin` client 的
 scope/auto-approve 包含 account、audio、audit、media、note 的 `read,manage` 及 document 的 `read,write`，`*:super` 不得 auto-approve。`core_agent`
 保持其既有 `note:read,note:write,sys:read,media:read` 范围，但按上文继续拒绝旧业务
 路由。所有变更仍通过“角色有效权限 ∩ client scopes ∩ request scopes（未传则
