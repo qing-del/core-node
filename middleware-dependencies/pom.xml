@@ -293,7 +293,7 @@
             </dependency>
             <dependency>
                 <groupId>com.jacolp</groupId>
-                <artifactId>middleware-open-api-agent</artifactId>
+                <artifactId>middleware-open-api</artifactId>
                 <version>${middleware.version}</version>
             </dependency>
         </dependencies>
