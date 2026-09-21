@@ -27,6 +27,7 @@
         <module>middleware-module-audit</module>
         <module>middleware-module-audio</module>
         <module>middleware-open-api</module>
+        <module>middleware-agent</module>
 
         <module>middleware-server</module>
     </modules>
