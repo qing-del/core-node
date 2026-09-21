@@ -67,7 +67,7 @@ class MigrationScriptTest {
         String migration = readMigration("20260812_phase5_business_route_scopes.sql");
         String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
         String phaseFiveUserScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,media:read,media:write,note:read,note:write";
-        String bootstrapUserScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,"
+        String bootstrapUserScopes = "account:read,account:write,agent:chat,audio:read,audio:write,audit:read,audit:write,"
                 + "document:read,document:write,media:read,media:write,note:read,note:write";
         String adminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,document:read,document:write,media:read,media:manage,note:read,note:manage";
 
@@ -179,11 +179,13 @@ class MigrationScriptTest {
     void documentScopesShouldBeAvailableToTheUserClientAndPermissionCatalogue() throws IOException {
         String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
         String migration = readMigration("20260824_document_oauth_scopes.sql");
-        String userScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,"
+        String bootstrapUserScopes = "account:read,account:write,agent:chat,audio:read,audio:write,audit:read,audit:write,"
+                + "document:read,document:write,media:read,media:write,note:read,note:write";
+        String migrationUserScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,"
                 + "document:read,document:write,media:read,media:write,note:read,note:write";
 
         assertThat(bootstrap)
-                .contains(userScopes)
+                .contains(bootstrapUserScopes)
                 .contains("('document:read', NULL, 'document', 'read', 'active'")
                 .contains("('document:write', NULL, 'document', 'write', 'active'");
         assertThat(migration)
@@ -191,9 +193,29 @@ class MigrationScriptTest {
                 .contains("document_oauth_scopes_postflight")
                 .contains("'document:read'")
                 .contains("'document:write'")
-                .contains(userScopes)
+                .contains(migrationUserScopes)
                 .contains("v_document_permission_count <> 2")
                 .contains("v_user_client_count <> 1");
+    }
+
+    @Test
+    void agentChatScopeShouldBeAvailableToTheUserClientAndUserRole() throws IOException {
+        String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
+        String migration = readMigration("20260921_agent_chat_oauth_scope.sql");
+        String userScopes = "account:read,account:write,agent:chat,audio:read,audio:write,audit:read,audit:write,"
+                + "document:read,document:write,media:read,media:write,note:read,note:write";
+
+        assertThat(bootstrap)
+                .contains(userScopes)
+                .contains("('agent:chat', NULL, 'agent', 'chat', 'active'")
+                .contains("IN ('*:read', '*:write', 'agent:chat')");
+        assertThat(migration)
+                .contains("INSERT INTO `sys_permission`")
+                .contains("'agent:chat'")
+                .contains("INSERT INTO `sys_role_perm`")
+                .contains("r.`role_code` = 'USER'")
+                .contains(userScopes)
+                .contains("BINARY `client_id` = 'user'");
     }
 
     @Test

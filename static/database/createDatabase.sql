@@ -125,10 +125,10 @@ INSERT INTO `oauth2_registered_client` (
     'password,email-code,refresh_token',
     NULL,
     NULL,
-    'account:read,account:write,audio:read,audio:write,audit:read,audit:write,document:read,document:write,media:read,media:write,note:read,note:write',
+    'account:read,account:write,agent:chat,audio:read,audio:write,audit:read,audit:write,document:read,document:write,media:read,media:write,note:read,note:write',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":false,"settings.client.require-authorization-consent":false}',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration","PT3H"],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration","PT72H"],"settings.token.authorization-code-time-to-live":["java.time.Duration","PT5M"],"settings.token.device-code-time-to-live":["java.time.Duration","PT5M"]}',
-    'account:read,account:write,audio:read,audio:write,audit:read,audit:write,document:read,document:write,media:read,media:write,note:read,note:write',
+    'account:read,account:write,agent:chat,audio:read,audio:write,audit:read,audit:write,document:read,document:write,media:read,media:write,note:read,note:write',
     'active',
     '0.0.0.0/0,::/0'
 ),
@@ -173,6 +173,7 @@ INSERT INTO `sys_permission` (`code`, `oauth_scope`, `resource`, `action`, `stat
     ('account:read', NULL, 'account', 'read', 'active', 'Read account data'),
     ('account:write', NULL, 'account', 'write', 'active', 'Write own account data'),
     ('account:manage', NULL, 'account', 'manage', 'active', 'Manage accounts'),
+    ('agent:chat', NULL, 'agent', 'chat', 'active', 'Use basic AI chat'),
     ('document:read', NULL, 'document', 'read', 'active', 'Read collaborative documents and metadata'),
     ('document:write', NULL, 'document', 'write', 'active', 'Create and edit own collaborative documents'),
     ('note:read', NULL, 'note', 'read', 'active', 'Read notes and note metadata'),
@@ -194,7 +195,7 @@ INSERT INTO `sys_role_perm` (`role_id`, `perm_id`)
 SELECT r.`id`, p.`id`
 FROM `sys_role` r
 JOIN `sys_permission` p
-  ON (r.`role_code` = 'USER' AND p.`code` IN ('*:read', '*:write'))
+  ON (r.`role_code` = 'USER' AND p.`code` IN ('*:read', '*:write', 'agent:chat'))
   OR (r.`role_code` = 'ADMIN' AND p.`code` = '*:manage')
   OR (r.`role_code` = 'CREATOR' AND p.`code` = '*:super');
 
