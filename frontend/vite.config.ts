@@ -20,6 +20,12 @@ export default defineConfig({
         target: 'ws://localhost:8080',
         ws: true,
         changeOrigin: true
+      },
+      // The backend owns /s/{code}: it returns the short-lived 302 to the SPA.
+      // Do not rewrite this path, otherwise the controller cannot receive code.
+      '/s/': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
       }
     }
   }

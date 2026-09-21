@@ -1,8 +1,9 @@
 package com.jacolp.system.application.api;
 
+import com.jacolp.constant.UserConstant;
+import com.jacolp.system.api.UserProfileApi;
 import com.jacolp.system.infrastructure.persistence.dataobject.UserDO;
 import com.jacolp.system.infrastructure.persistence.mapper.UserMapper;
-import com.jacolp.system.api.UserProfileApi;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -43,5 +44,14 @@ public class UserProfileApiService implements UserProfileApi {
             profiles.put(user.getId(), new UserProfile(user.getId(), user.getUsername(), user.getNickname()));
         }
         return Map.copyOf(profiles);
+    }
+
+    @Override
+    public boolean isActiveUser(long userId) {
+        if (userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
+        }
+        UserDO user = userMapper.selectById(userId);
+        return user != null && user.getStatus() != null && user.getStatus() == UserConstant.ACTIVE_STATUS;
     }
 }

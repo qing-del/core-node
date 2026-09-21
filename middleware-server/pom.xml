@@ -47,6 +47,10 @@
         </dependency>
         <dependency>
             <groupId>com.jacolp</groupId>
+            <artifactId>middleware-module-document-biz</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jacolp</groupId>
             <artifactId>middleware-module-media-biz</artifactId>
         </dependency>
         <dependency>

@@ -215,6 +215,7 @@ export const useAuthStore = defineStore('auth', () => {
     fetchAdminUserInfo,
     updateProfile,
     refreshCurrentUserInfo,
+    clearSession,
     adminLogout,
     logout
   }

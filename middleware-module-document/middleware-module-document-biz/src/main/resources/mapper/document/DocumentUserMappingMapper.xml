@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.jacolp.document.infrastructure.persistence.mapper.DocumentUserMappingMapper">
+
+    <resultMap id="DocumentUserMappingMap"
+               type="com.jacolp.document.infrastructure.persistence.dataobject.DocumentUserMappingDO">
+        <id column="document_id" property="documentId"/>
+        <id column="user_id" property="userId"/>
+        <result column="permission" property="permission"
+                javaType="com.jacolp.document.enums.DocumentPermission"/>
+        <result column="enabled" property="enabled"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectByDocumentId" resultMap="DocumentUserMappingMap">
+        SELECT document_id, user_id, permission, enabled, create_time, update_time
+        FROM biz_document_user
+        WHERE document_id = #{documentId}
+        ORDER BY user_id ASC
+    </select>
+
+    <select id="selectEnabledReadableByDocumentIds" resultMap="DocumentUserMappingMap">
+        SELECT document_id, user_id, permission, enabled, create_time, update_time
+        FROM biz_document_user
+        WHERE enabled = 1
+          AND permission IN ('READ', 'WRITE')
+          AND document_id IN
+          <foreach collection="documentIds" item="documentId" open="(" separator="," close=")">
+              #{documentId}
+          </foreach>
+        ORDER BY document_id ASC, user_id ASC
+    </select>
+
+    <select id="selectByDocumentIdAndUserId" resultMap="DocumentUserMappingMap">
+        SELECT document_id, user_id, permission, enabled, create_time, update_time
+        FROM biz_document_user
+        WHERE document_id = #{documentId}
+          AND user_id = #{userId}
+    </select>
+
+    <select id="selectEnabledByDocumentIdAndUserId" resultMap="DocumentUserMappingMap">
+        SELECT document_id, user_id, permission, enabled, create_time, update_time
+        FROM biz_document_user
+        WHERE document_id = #{documentId}
+          AND user_id = #{userId}
+          AND enabled = 1
+    </select>
+
+    <insert id="upsertByDocumentOwner">
+        INSERT INTO biz_document_user
+            (document_id, user_id, permission, enabled)
+        SELECT #{mapping.documentId}, #{mapping.userId}, #{mapping.permission}, #{mapping.enabled}
+        FROM biz_document
+        WHERE id = #{mapping.documentId}
+          AND owner_user_id = #{ownerUserId}
+          AND deleted = 0
+        ON DUPLICATE KEY UPDATE
+            permission = VALUES(permission),
+            enabled = VALUES(enabled),
+            update_time = CURRENT_TIMESTAMP(3)
+    </insert>
+
+    <update id="disableByDocumentOwner">
+        UPDATE biz_document_user
+        SET enabled = 0,
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE document_id = #{documentId}
+          AND user_id = #{userId}
+          AND EXISTS (
+              SELECT 1
+              FROM biz_document
+              WHERE id = #{documentId}
+                AND owner_user_id = #{ownerUserId}
+                AND deleted = 0
+          )
+    </update>
+</mapper>

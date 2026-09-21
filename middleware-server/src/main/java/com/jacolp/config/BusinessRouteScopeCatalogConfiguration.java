@@ -22,12 +22,13 @@ public class BusinessRouteScopeCatalogConfiguration {
 
     private static final String INTERNAL_LOGOUT_PATH = "/auth/logout";
 
+    /** 将静态路由目录构造成启动后不可变的授权策略。 */
     @Bean
     public BusinessRouteAuthorizationPolicy businessRouteAuthorizationPolicy() {
         return new ImmutableBusinessRouteAuthorizationPolicy(entries());
     }
 
-    /** Matches only the 116 bearer business routes, never the four public activation exceptions. */
+    /** 将目录中的每条方法/路径规则组合为资源服务器需要的请求匹配器；不包含公共激活例外。 */
     @Bean
     public RequestMatcher businessRouteRequestMatcher() {
         return new OrRequestMatcher(entries().stream()
@@ -35,12 +36,13 @@ public class BusinessRouteScopeCatalogConfiguration {
                 .toList());
     }
 
-    /** The resource-server chain also owns this authenticated internal endpoint, outside the 116 route catalogue. */
+    /** 匹配资源服务器链路内部的登出接口；该接口不计入业务目录统计。 */
     @Bean
     public RequestMatcher internalLogoutRequestMatcher() {
         return PathPatternRequestMatcher.pathPattern(HttpMethod.POST, INTERNAL_LOGOUT_PATH);
     }
 
+    /** 合并业务路由和内部登出匹配器，作为 bearer 资源服务器过滤范围。 */
     @Bean
     public RequestMatcher businessResourceServerRequestMatcher(
             @Qualifier("businessRouteRequestMatcher") RequestMatcher businessRouteRequestMatcher,
@@ -48,6 +50,12 @@ public class BusinessRouteScopeCatalogConfiguration {
         return new OrRequestMatcher(List.of(businessRouteRequestMatcher, internalLogoutRequestMatcher));
     }
 
+    /**
+     * 返回 user/admin 业务路由的唯一目录。
+     *
+     * <p>文档元数据读取和短链兑换使用 {@code userAny}，表示读或写 scope 任一满足即可；
+     * 创建、修改和正文写入相关入口仍明确要求 {@code document:write}。</p>
+     */
     public static List<BusinessRouteAuthorizationEntry> entries() {
         return List.of(
                 // user audio
@@ -60,6 +68,19 @@ public class BusinessRouteScopeCatalogConfiguration {
                 user("POST /user/image/upload media:write"), user("PUT /user/image/modify-file media:write"),
                 user("PUT /user/image/modify-info media:write"), user("GET /user/image/{id} media:read"),
                 user("DELETE /user/image/{id} media:write"),
+                // user collaborative documents
+                user("POST /user/document document:write"), user("GET /user/document document:read"),
+                userAny("GET /user/document/{documentId}/meta document:read|document:write"),
+                user("GET /user/document/{documentId}/users document:read"),
+                user("PUT /user/document/{documentId}/users/{userId} document:write"),
+                user("DELETE /user/document/{documentId}/users/{userId} document:write"),
+                user("POST /user/document/{documentId}/share-links document:write"),
+                user("GET /user/document/{documentId}/share-links document:read"),
+                user("DELETE /user/document/{documentId}/share-links/{shareLinkId} document:write"),
+                userAny("POST /user/document/share-links/{code}/redeem document:read|document:write"),
+                userAny("GET /user/file/completion note:read|media:read|document:read"),
+                user("PATCH /user/document/{documentId}/meta document:write"),
+                user("DELETE /user/document/{documentId} document:write"),
                 // user notes
                 user("POST /user/note/list note:read"), user("GET /user/note/overview note:read"),
                 user("POST /user/note/upload note:write"), user("PUT /user/note/upload/{noteId} note:write"),
@@ -116,22 +137,42 @@ public class BusinessRouteScopeCatalogConfiguration {
                 admin("POST /admin/email/send account:manage"), admin("POST /admin/user/list account:read"),
                 admin("PUT /admin/user/user account:manage"), admin("POST /admin/user/user account:manage"),
                 admin("DELETE /admin/user/user account:manage"), admin("POST /admin/user/status/{status} account:manage"),
-                admin("GET /admin/user/user account:read"), admin("GET /admin/user/me account:read")
+                admin("GET /admin/user/user account:read"), admin("GET /admin/user/me account:read"),
+                // admin collaborative documents
+                admin("GET /admin/document document:read"),
+                admin("POST /admin/document/snapshot-history/clear document:manage")
         );
     }
 
+    private static BusinessRouteAuthorizationEntry userAny(String specification) {
+        // any-of 目录项允许同一资源同时服务 document:read 和 document:write 用户。
+        return entry(specification, "user", true);
+    }
+
     private static BusinessRouteAuthorizationEntry user(String specification) {
+        // 普通 user 目录项要求 specification 中列出的全部 scope。
         return entry(specification, "user");
     }
 
     private static BusinessRouteAuthorizationEntry admin(String specification) {
+        // admin 目录项只允许 admin client，并沿用 all-of scope 语义。
         return entry(specification, "admin");
     }
 
     private static BusinessRouteAuthorizationEntry entry(String specification, String clientId) {
+        return entry(specification, clientId, false);
+    }
+
+    /** 解析“METHOD path scope”文本并构造已校验的授权目录项。 */
+    private static BusinessRouteAuthorizationEntry entry(String specification, String clientId, boolean anyRequiredScope) {
         String[] fields = specification.split(" ", 3);
-        if (fields.length != 3) throw new IllegalArgumentException("invalid route specification: " + specification);
-        Set<String> scopes = new LinkedHashSet<>(Arrays.asList(fields[2].split("\\+")));
-        return new BusinessRouteAuthorizationEntry(HttpMethod.valueOf(fields[0]), fields[1], scopes, clientId);
+        if (fields.length != 3) {
+            // 目录格式固定为方法、绝对路径和 scope 列表，字段缺失时启动应立即失败。
+            throw new IllegalArgumentException("invalid route specification: " + specification);
+        }
+        String scopeSeparator = anyRequiredScope ? "\\|" : "\\+";
+        // any-of 用 | 分隔 scope，all-of 用 + 分隔；解析后由 Entry 再校验 scope 合法性。
+        Set<String> scopes = new LinkedHashSet<>(Arrays.asList(fields[2].split(scopeSeparator)));
+        return new BusinessRouteAuthorizationEntry(HttpMethod.valueOf(fields[0]), fields[1], scopes, clientId, anyRequiredScope);
     }
 }

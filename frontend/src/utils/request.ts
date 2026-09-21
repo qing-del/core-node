@@ -9,9 +9,12 @@ import {
   readAuthSession,
   saveAuthSession
 } from '@/utils/authSession'
+import { sanitizeShareRedirect } from '@/utils/shareLink'
 
 interface RequestConfig extends AxiosRequestConfig {
   _authRetry?: boolean
+  /** 资源级元数据等场景自行展示中性错误时，禁止全局拦截器弹出服务端原文。 */
+  _silentErrorToast?: boolean
 }
 
 interface RefreshResult {
@@ -152,17 +155,36 @@ function expireSession(message = '登录状态已失效，请重新登录'): voi
     sessionExpiryNoticeShown = true
   }
   if (router.currentRoute.value.path !== '/login') {
-    void router.push('/login')
+    const redirect = sanitizeShareRedirect(router.currentRoute.value.path)
+    const loginLocation = redirect ? { path: '/login', query: { redirect } } : '/login'
+    // Replace the credential-bearing share page in history while preserving a
+    // validated internal redirect for the next user login.
+    void router.replace(loginLocation)
   }
 }
 
 function sanitizeRequestError(error: unknown): unknown {
   if (!isRecord(error)) return error
 
+  const redactShareCodeText = (value: unknown): unknown => {
+    if (typeof value !== 'string') return value
+    // A server or proxy must not be able to echo the opaque 256-bit code into
+    // a caller-visible error object or a later diagnostic log.
+    return value.replace(/[A-Za-z0-9_-]{43}/g, '[redacted]')
+  }
+
+  const redactShareCode = (url: unknown): unknown => {
+    if (typeof url !== 'string') return url
+    // Keep rejected Axios errors from retaining the opaque credential in a
+    // caller's diagnostic object. The live request has already completed.
+    return url.replace(/(\/share-links\/)[A-Za-z0-9_-]{43}(\/redeem)/g, '$1[redacted]$2')
+  }
+
   const sanitizeConfig = (config: unknown) => {
     if (!isRecord(config)) return
     // Callers may log rejected errors; never retain request bodies or bearer headers there.
     config.data = undefined
+    config.url = redactShareCode(config.url)
     const headers = config.headers
     if (!isRecord(headers)) return
     if (typeof headers.delete === 'function') {
@@ -172,8 +194,18 @@ function sanitizeRequestError(error: unknown): unknown {
     }
   }
 
+  error.message = redactShareCodeText(error.message)
   sanitizeConfig(error.config)
-  if (isRecord(error.response)) sanitizeConfig(error.response.config)
+  if (isRecord(error.response)) {
+    error.response.data = typeof error.response.data === 'string'
+      ? redactShareCodeText(error.response.data)
+      : error.response.data
+    if (isRecord(error.response.data)) {
+      error.response.data.msg = redactShareCodeText(error.response.data.msg)
+      error.response.data.message = redactShareCodeText(error.response.data.message)
+    }
+    sanitizeConfig(error.response.config)
+  }
   return error
 }
 
@@ -198,7 +230,8 @@ instance.interceptors.response.use(
         return res.data
       }
       const message = responseMessage(res) || '请求失败'
-      if (!isAuthenticationEndpoint(response.config?.url)) toastError(message)
+      const config = response.config as RequestConfig
+      if (!isAuthenticationEndpoint(config.url) && !config._silentErrorToast) toastError(message)
       return Promise.reject(new Error(message))
     }
     return res
@@ -224,8 +257,8 @@ instance.interceptors.response.use(
     } else if (status === 401 && requiresAuthRoute() && !authEndpoint) {
       expireSession(serverMessage || '登录状态已失效，请重新登录')
     } else if (status === 403) {
-      toastError(serverMessage || '无权访问')
-    } else if (!authEndpoint) {
+      if (!config?._silentErrorToast) toastError(serverMessage || '无权访问')
+    } else if (!authEndpoint && !config?._silentErrorToast) {
       toastError(serverMessage || error.message || '网络错误')
     }
     return Promise.reject(sanitizeRequestError(error))
@@ -244,6 +277,10 @@ request.post = <T = unknown>(url: string, data?: unknown, config?: RequestConfig
 
 request.put = <T = unknown>(url: string, data?: unknown, config?: RequestConfig): Promise<T> =>
   instance.put(url, data, config) as unknown as Promise<T>
+
+// 标题修改使用 PATCH，沿用现有请求实例的认证、错误处理和响应解包逻辑。
+request.patch = <T = unknown>(url: string, data?: unknown, config?: RequestConfig): Promise<T> =>
+  instance.patch(url, data, config) as unknown as Promise<T>
 
 request.delete = <T = unknown>(url: string, config?: RequestConfig): Promise<T> =>
   instance.delete(url, config) as unknown as Promise<T>

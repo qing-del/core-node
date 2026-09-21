@@ -3,6 +3,7 @@ package com.jacolp.middleware.authorization;
 import com.jacolp.config.BusinessRouteScopeCatalogConfiguration;
 import com.jacolp.common.security.oauth2.authorization.BusinessRouteAuthorizationEntry;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
@@ -29,6 +30,10 @@ class BusinessRouteScopeCatalogConfigurationTest {
             "com.jacolp.audio.controller.user.AudioController",
             "com.jacolp.audit.application.controller.admin.AuditController",
             "com.jacolp.audit.application.controller.admin.ImageAuditReviewCompatibilityController",
+            "com.jacolp.document.controller.AdminDocumentController",
+            "com.jacolp.document.controller.DocumentController",
+            "com.jacolp.document.controller.DocumentShareLinkRedemptionController",
+            "com.jacolp.document.controller.FileIndexCompletionController",
             "com.jacolp.media.controller.AdminImageController",
             "com.jacolp.media.controller.UserImageController",
             "com.jacolp.media.controller.UserImageAuditApplicationController",
@@ -55,13 +60,47 @@ class BusinessRouteScopeCatalogConfigurationTest {
         Map<String, Long> policyRoutes = BusinessRouteScopeCatalogConfiguration.entries().stream()
                 .collect(Collectors.groupingBy(BusinessRouteScopeCatalogConfigurationTest::route, Collectors.counting()));
 
-        assertThat(mappedRoutes).hasSize(120);
+        assertThat(mappedRoutes).hasSize(135);
         assertThat(mappedRoutes).containsAll(EXCEPTIONS);
         assertThat(EXCEPTIONS).hasSize(4);
-        assertThat(protectedRoutes).hasSize(116);
-        assertThat(policyRoutes).hasSize(116);
+        assertThat(protectedRoutes).hasSize(131);
+        assertThat(policyRoutes).hasSize(131);
         assertThat(policyRoutes.keySet()).containsExactlyInAnyOrderElementsOf(protectedRoutes);
         assertThat(policyRoutes.values()).allMatch(count -> count == 1L);
+    }
+
+    @Test
+    void metadataReadRouteAcceptsEitherDocumentScope() {
+        BusinessRouteAuthorizationEntry entry = BusinessRouteScopeCatalogConfiguration.entries().stream()
+                .filter(candidate -> candidate.method().name().equals("GET")
+                        && candidate.pathPattern().equals("/user/document/{documentId}/meta"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(entry.anyRequiredScope()).isTrue();
+        assertThat(entry.requiredScopes()).containsExactlyInAnyOrder("document:read", "document:write");
+    }
+
+    @Test
+    void fileCompletionRouteAcceptsAnyFileReadScope() {
+        BusinessRouteAuthorizationEntry entry = BusinessRouteScopeCatalogConfiguration.entries().stream()
+                .filter(candidate -> candidate.method() == HttpMethod.GET
+                        && candidate.pathPattern().equals("/user/file/completion"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(entry.anyRequiredScope()).isTrue();
+        assertThat(entry.requiredScopes()).containsExactlyInAnyOrder(
+                "note:read", "media:read", "document:read");
+    }
+
+    @Test
+    void adminSnapshotHistoryClearRouteRequiresDocumentManageScope() {
+        BusinessRouteAuthorizationEntry entry = BusinessRouteScopeCatalogConfiguration.entries().stream()
+                .filter(candidate -> candidate.method() == HttpMethod.POST
+                        && candidate.pathPattern().equals("/admin/document/snapshot-history/clear"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(entry.anyRequiredScope()).isFalse();
+        assertThat(entry.requiredScopes()).containsExactly("document:manage");
     }
 
     @Test
@@ -70,14 +109,18 @@ class BusinessRouteScopeCatalogConfigurationTest {
                 "static/document/security/phase5-business-route-scope-catalog.md"));
         long documentedEntries = document.lines().filter(line -> line.matches("\\| \\d+ \\|.*")).count();
 
-        assertThat(documentedEntries).isEqualTo(116);
+        assertThat(documentedEntries).isEqualTo(129);
         assertThat(document.lines().filter(line -> line.startsWith("## `/user/**`")).toList())
-                .containsExactly("## `/user/**`：user client（71 bearer routes）");
+                .containsExactly("## `/user/**`：user client（84 bearer routes）");
         assertThat(document.lines().filter(line -> line.startsWith("## `/admin/**`")).toList())
-                .containsExactly("## `/admin/**`：admin client（45 bearer routes）");
-        assertThat(document).contains("120 个", "75 个 user", "45 个 admin", "116 个是 bearer", "4 个是下文明确排除");
+                .containsExactly("## `/admin/**`：admin client（47 bearer routes）");
+        assertThat(document).contains("135 个", "88 个 user", "47 个 admin", "131 个是 bearer", "4 个是下文明确排除");
         assertThat(document).contains("`GET /user/note/source/{id}`", "`audit:write`", "`audit:manage`",
-                "`note:read` + `media:read`", "`note:write` + `media:read`");
+                "`note:read` + `media:read`", "`note:write` + `media:read`", "`document:read`",
+                "`document:write`", "`GET /user/document/{documentId}/users`",
+                "`PUT /user/document/{documentId}/users/{userId}`",
+                "`DELETE /user/document/{documentId}/users/{userId}`",
+                "`POST /user/document/share-links/{code}/redeem`", "`GET /user/file/completion`");
     }
 
     private static Set<String> mappedBusinessRoutes() throws Exception {

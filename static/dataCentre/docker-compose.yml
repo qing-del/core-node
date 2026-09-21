@@ -1,0 +1,235 @@
+name: home-dev-infra
+
+# 本地数据中心依赖统一加入 dev-net，应用容器可通过服务名访问而无需暴露内部地址。
+services:
+  mysql:
+    # MySQL 为持久化元数据和操作日志提供数据库，并开启 Canal 所需的 ROW Binlog。
+    image: mysql:8.4
+    container_name: dev-mysql
+    hostname: dev-mysql
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Root@123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-dev_db}
+      MYSQL_USER: ${MYSQL_USER:-dev}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-Dev@123456}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+      - --lower-case-table-names=1
+      # --- 新增：Canal 所需的 Binlog 配置 ---
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      - --server-id=1
+    ports:
+      - "3306:3306"
+    volumes:
+      - type: bind
+        source: D:/CodeData/mysql/data
+        target: /var/lib/mysql
+      # --- 新增：挂载初始化 SQL 脚本目录 ---
+      - type: bind
+        source: D:/CodeData/mysql/init
+        target: /docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - dev-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  canal:
+    # Canal 读取 MySQL Binlog；等待 MySQL 健康后再启动，避免实例配置过早连接失败。
+    image: canal/canal-server:v1.1.8
+    container_name: dev-canal
+    hostname: dev-canal
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      # Canal 实例名称，对应 conf 目录下的文件夹名
+#      canal.instance.name: dev_db
+      canal.auto.scan: "false"
+      canal.destinations: example
+      canal.instance.master.address: mysql:3306
+      canal.instance.dbUsername: ${CANAL_DB_USER:-dev}
+      canal.instance.dbPassword: ${CANAL_DB_PASSWORD:-Dev@123456}
+      canal.instance.filter.regex: "${CANAL_FILTER:-personal_saas[.].*}"
+    ports:
+      # 11111: Canal TCP 协议端口
+      # 11112: Canal Admin 端口（可选）
+      - "11110:11110"
+      - "11111:11111"
+      - "11112:11112"
+    volumes:
+      # 挂载自定义的 Canal 实例配置
+      #- type: bind
+      #  source: D:/CodeData/canal/conf
+      #  target: /home/admin/canal-server/conf/dev_db
+      # 挂载日志目录（可选，方便排查问题）
+      - type: bind
+        source: D:/CodeData/canal/logs
+        target: /home/admin/canal-server/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - dev-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  redis:
+    # Redis 保存 Room 运行态、presence 租约和待刷盘的二进制 Stream 更新。
+    image: redis:7.4
+    container_name: dev-redis
+    hostname: dev-redis
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-Redis@123456}
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD"
+    ports:
+      - "6379:6379"
+    volumes:
+      - type: bind
+        source: D:/CodeData/redis/data
+        target: /data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - dev-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  rabbitmq:
+    # RabbitMQ 承载不带正文的 FLUSH_LOG/COMPACT/CLOSE 调度信号。
+    image: rabbitmq:4-management
+    container_name: dev-rabbitmq
+    hostname: dev-rabbitmq
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-dev}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-Rabbit@123456}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - type: bind
+        source: D:/CodeData/rabbitmq/data
+        target: /var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - dev-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  minio:
+    # MinIO 保存不可变 Yjs 快照对象；快照指针由 MySQL CAS 切换。
+    image: minio/minio:latest
+    container_name: dev-minio
+    hostname: dev-minio
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-Minio@123456}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - type: bind
+        source: D:/CodeData/minio/data
+        target: /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - dev-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  elasticsearch:
+    # Elasticsearch 作为可选的通用搜索基础设施，不参与正文协作恢复链路。
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: dev-elasticsearch
+    hostname: dev-elasticsearch
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      node.name: dev-elasticsearch
+      cluster.name: home-dev-cluster
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: ${ES_JAVA_OPTS:--Xms1g -Xmx1g}
+    ports:
+      - "9200:9200"
+    volumes:
+      - type: bind
+        source: D:/CodeData/elasticsearch/data
+        target: /usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks:
+      - dev-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+networks:
+  dev-net:
+    name: home-dev-net
+    driver: bridge

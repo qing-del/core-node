@@ -41,6 +41,8 @@ jacolp:
     active-ttl: 900000
     active-code-ttl: 300000
     active-token-name: ${jacolp.jwt.active-token-name:activeToken}
+  # 必须是用户实际访问的前端 origin；Nginx 本地部署默认提供 http://localhost。
+  # 生产环境请通过 JACOLP_APP_BASE_URL 注入公开 HTTPS origin，不能使用 backend:8080。
   base-url: ${jacolp.app.base-url:http://localhost}
   markdown:
     # Docker 中 markdown 输入输出目录（容器内路径）

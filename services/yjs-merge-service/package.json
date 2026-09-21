@@ -1,0 +1,22 @@
+{
+  "name": "yjs-merge-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/server.js",
+    "test": "npm run build && node --test dist/test/merge.test.js dist/test/server.test.js"
+  },
+  "dependencies": {
+    "yjs": "^13.6.27"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -125,10 +125,10 @@ INSERT INTO `oauth2_registered_client` (
     'password,email-code,refresh_token',
     NULL,
     NULL,
-    'account:read,account:write,audio:read,audio:write,audit:read,audit:write,media:read,media:write,note:read,note:write',
+    'account:read,account:write,audio:read,audio:write,audit:read,audit:write,document:read,document:write,media:read,media:write,note:read,note:write',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":false,"settings.client.require-authorization-consent":false}',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration","PT3H"],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration","PT72H"],"settings.token.authorization-code-time-to-live":["java.time.Duration","PT5M"],"settings.token.device-code-time-to-live":["java.time.Duration","PT5M"]}',
-    'account:read,account:write,audio:read,audio:write,audit:read,audit:write,media:read,media:write,note:read,note:write',
+    'account:read,account:write,audio:read,audio:write,audit:read,audit:write,document:read,document:write,media:read,media:write,note:read,note:write',
     'active',
     '0.0.0.0/0,::/0'
 ),
@@ -140,10 +140,10 @@ INSERT INTO `oauth2_registered_client` (
     'password,email-code,refresh_token',
     NULL,
     NULL,
-    'account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,media:read,media:manage,note:read,note:manage',
+    'account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,document:read,document:write,media:read,media:manage,note:read,note:manage',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":false,"settings.client.require-authorization-consent":false}',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.token.reuse-refresh-tokens":false,"settings.token.x509-certificate-bound-access-tokens":false,"settings.token.id-token-signature-algorithm":["org.springframework.security.oauth2.jose.jws.SignatureAlgorithm","RS256"],"settings.token.access-token-time-to-live":["java.time.Duration","PT3H"],"settings.token.access-token-format":{"@class":"org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat","value":"self-contained"},"settings.token.refresh-token-time-to-live":["java.time.Duration","PT72H"],"settings.token.authorization-code-time-to-live":["java.time.Duration","PT5M"],"settings.token.device-code-time-to-live":["java.time.Duration","PT5M"]}',
-    'account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,media:read,media:manage,note:read,note:manage',
+    'account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,document:read,document:write,media:read,media:manage,note:read,note:manage',
     'active',
     '0.0.0.0/0,::/0'
 ),
@@ -173,6 +173,8 @@ INSERT INTO `sys_permission` (`code`, `oauth_scope`, `resource`, `action`, `stat
     ('account:read', NULL, 'account', 'read', 'active', 'Read account data'),
     ('account:write', NULL, 'account', 'write', 'active', 'Write own account data'),
     ('account:manage', NULL, 'account', 'manage', 'active', 'Manage accounts'),
+    ('document:read', NULL, 'document', 'read', 'active', 'Read collaborative documents and metadata'),
+    ('document:write', NULL, 'document', 'write', 'active', 'Create and edit own collaborative documents'),
     ('note:read', NULL, 'note', 'read', 'active', 'Read notes and note metadata'),
     ('note:write', NULL, 'note', 'write', 'active', 'Write own notes and note metadata'),
     ('note:manage', NULL, 'note', 'manage', 'active', 'Manage notes and note metadata'),
@@ -613,3 +615,93 @@ CREATE TABLE `biz_image_delete_dead_letter` (
     KEY `idx_delete_event` (`event_id`),
     KEY `idx_delete_resource` (`resource_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图片删除死信队列表';
+
+-- ==========================================
+-- 16. 协作文档主表与持久化 Yjs 操作日志
+-- ==========================================
+CREATE TABLE `biz_document` (
+    `id`                  bigint       NOT NULL AUTO_INCREMENT COMMENT '文档ID',
+    `owner_user_id`       bigint       NOT NULL COMMENT '文档所有者用户ID',
+    `title`               varchar(255) NOT NULL COMMENT '文档标题',
+    `content_object_key`  varchar(512) DEFAULT NULL COMMENT '当前MinIO Yjs snapshot对象键',
+    `persisted_log_id`    bigint       NOT NULL DEFAULT 0 COMMENT '当前snapshot已包含的最大document_op_log.id',
+    `last_modify_time`    datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '最近一次接受文档更新的时间',
+    `last_modify_user_id` bigint       DEFAULT NULL COMMENT '最近修改用户ID',
+    `deleted`             tinyint      NOT NULL DEFAULT 0 COMMENT '逻辑删除(0:正常,1:删除)',
+    `version`             bigint       NOT NULL DEFAULT 0 COMMENT '文档Meta/Snapshot版本',
+    `create_time`         datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    `update_time`         datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_document_owner_deleted_time` (`owner_user_id`, `deleted`, `last_modify_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作文档元数据与当前Snapshot指针';
+
+CREATE TABLE `biz_document_user` (
+    `document_id` bigint      NOT NULL COMMENT '关联 biz_document.id',
+    `user_id`     bigint      NOT NULL COMMENT '被授权用户ID',
+    `permission`  varchar(16) NOT NULL COMMENT 'READ 或 WRITE；WRITE 隐含 READ',
+    `enabled`     tinyint     NOT NULL DEFAULT 1 COMMENT '授权是否生效(0:已撤销,1:生效)',
+    `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`document_id`, `user_id`),
+    KEY `idx_document_user_visible` (`user_id`, `enabled`, `document_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作文档用户直接授权';
+
+-- 文档分享短链主表：只保存 token 摘要，兑换时按有效期和使用次数校验。
+CREATE TABLE `biz_document_share_link` (
+    `id`              bigint       NOT NULL AUTO_INCREMENT COMMENT '分享短链ID',
+    `document_id`     bigint       NOT NULL COMMENT '关联 biz_document.id',
+    `creator_user_id` bigint       NOT NULL COMMENT '短链生成者用户ID',
+    `token_hash`      binary(32)   NOT NULL COMMENT '原始短链令牌的SHA-256摘要',
+    `permission`      varchar(16)  NOT NULL COMMENT 'READ 或 WRITE；WRITE 隐含 READ',
+    `expires_at`      datetime(3)  NOT NULL COMMENT '短链有效期截止时间',
+    `max_uses`        int unsigned NOT NULL COMMENT '短链最大有效兑换次数',
+    `used_count`      int unsigned NOT NULL DEFAULT 0 COMMENT '已完成的有效兑换次数',
+    `enabled`         tinyint      NOT NULL DEFAULT 1 COMMENT '短链是否有效(0:已取消,1:有效)',
+    `revoked_at`      datetime(3)  DEFAULT NULL COMMENT '短链取消时间',
+    `create_time`     datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time`     datetime(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_document_share_token_hash` (`token_hash`),
+    KEY `idx_document_share_owner` (`document_id`, `creator_user_id`, `enabled`),
+    KEY `idx_document_share_expiry` (`enabled`, `expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作文档分享短链';
+
+-- 短链兑换台账：联合主键保证同一用户对同一短链只计一次有效使用。
+CREATE TABLE `biz_document_share_link_redemption` (
+    `share_link_id` bigint      NOT NULL COMMENT '关联 biz_document_share_link.id',
+    `user_id`       bigint      NOT NULL COMMENT '兑换用户ID',
+    `permission`    varchar(16) NOT NULL COMMENT '本次兑换实际授予的权限',
+    `redeemed_at`   datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '首次有效兑换时间',
+    PRIMARY KEY (`share_link_id`, `user_id`),
+    KEY `idx_share_redemption_user` (`user_id`, `redeemed_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档分享短链兑换记录';
+CREATE TABLE `document_op_log` (
+    `id`               bigint       NOT NULL AUTO_INCREMENT COMMENT '持久化操作日志ID',
+    `document_id`      bigint       NOT NULL COMMENT '关联biz_document.id',
+    `redis_op_id`      varchar(64)  NOT NULL COMMENT 'Redis Stream entry ID',
+    `client_update_id` char(36)     NOT NULL COMMENT '客户端Yjs update UUID',
+    `update_data`      longblob     NOT NULL COMMENT 'Yjs binary update',
+    `operator_id`      bigint       DEFAULT NULL COMMENT '操作用户ID',
+    `operator_type`    varchar(16)  NOT NULL COMMENT '操作主体类型',
+    `create_time`      datetime(3)  NOT NULL COMMENT 'Redis接受update的服务端时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_document_redis_op` (`document_id`, `redis_op_id`),
+    UNIQUE KEY `uk_document_client_update` (`document_id`, `client_update_id`),
+    KEY `idx_document_log` (`document_id`, `id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='协作文档已可靠转存的Yjs增量日志';
+
+-- 文档 LINK Binding 投影：不建立跨模块外键，也不为资源节点目标增加唯一约束。
+CREATE TABLE `biz_resource_node` (
+    `id`            bigint       NOT NULL AUTO_INCREMENT COMMENT '跨模块资源节点ID',
+    `resource_type` varchar(32)  NOT NULL COMMENT '资源类型，例如 DOCUMENT',
+    `target_id`     bigint       NOT NULL COMMENT '目标资源在所属业务模块中的ID',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档正文引用的跨模块资源节点';
+
+CREATE TABLE `biz_document_relation` (
+    `source_document_id` bigint      NOT NULL COMMENT '源文档ID',
+    `ref_id`             char(36)    NOT NULL COMMENT '正文resourceReference稳定UUID',
+    `resource_node_id`   bigint      NOT NULL COMMENT '当前资源节点ID',
+    `is_delete`          tinyint     NOT NULL DEFAULT 0 COMMENT '软删除标记(0:有效,1:删除)',
+    PRIMARY KEY (`source_document_id`, `ref_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档与正文资源引用节点的关系投影';

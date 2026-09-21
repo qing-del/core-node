@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.jacolp.document.infrastructure.persistence.mapper.ResourceNodeMapper">
+
+    <insert id="insert" parameterType="com.jacolp.document.infrastructure.persistence.dataobject.ResourceNodeDO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO biz_resource_node
+            (resource_type, target_id)
+        VALUES
+            (#{resourceType}, #{targetId})
+    </insert>
+
+    <update id="updateTargetById">
+        UPDATE biz_resource_node
+        SET resource_type = #{resourceType},
+            target_id = #{targetId}
+        WHERE id = #{id}
+    </update>
+</mapper>

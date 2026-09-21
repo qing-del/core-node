@@ -3,12 +3,18 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-vue-next'
+import { sanitizeShareRedirect } from '@/utils/shareLink'
 
 const route = useRoute()
 const router = useRouter()
 
 const state = ref<'loading' | 'success' | 'error'>('loading')
 const message = ref('正在激活账号...')
+
+function loginLocation() {
+  const redirect = sanitizeShareRedirect(route.query.redirect)
+  return redirect ? { path: '/login', query: { redirect } } : '/login'
+}
 
 async function activate() {
   const token = route.params.token as string
@@ -26,7 +32,7 @@ async function activate() {
     state.value = 'success'
     message.value = '账号激活成功，3 秒后跳转到登录页...'
     setTimeout(() => {
-      router.push('/login')
+      void router.replace(loginLocation())
     }, 3000)
   } catch {
     state.value = 'error'
@@ -75,7 +81,7 @@ onMounted(() => {
         v-if="state === 'error'"
         type="button"
         class="cn-btn cn-btn-primary mx-auto px-5"
-        @click="router.push('/login')"
+        @click="router.replace(loginLocation())"
       >
         前往登录页
       </button>

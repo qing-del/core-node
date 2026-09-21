@@ -11,6 +11,10 @@
     <modules>
         <module>middleware-oss-autoconfigure</module>
         <module>middleware-oss-starter</module>
+        <module>middleware-minio-autoconfigure</module>
+        <module>middleware-minio-starter</module>
+        <module>middleware-elasticsearch-autoconfigure</module>
+        <module>middleware-elasticsearch-starter</module>
         <module>middleware-markdown-autoconfigure</module>
         <module>middleware-markdown-starter</module>
     </modules>

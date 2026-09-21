@@ -14,6 +14,10 @@ public interface ImageMapper {
     @Select("SELECT id, user_id AS userId, topic_id AS topicId, filename, oss_url AS ossUrl, storage_type AS storageType, file_size AS fileSize, is_public AS isPublic, audit_status AS auditStatus, upload_time AS uploadTime FROM biz_image WHERE id = #{id} AND audit_status != 4")
     ImageDO selectById(@Param("id") Long id);
 
+    List<ImageDO> selectFileIndexPage(@Param("afterId") long afterId, @Param("limit") int limit);
+
+    ImageDO selectFileIndexById(@Param("id") Long id);
+
     @Select("SELECT COUNT(*) FROM biz_image WHERE user_id = #{userId} AND topic_id = IFNULL(#{topicId}, 0) AND filename = #{filename} AND audit_status != 4")
     int countByUserIdTopicIdAndFilename(@Param("userId") Long userId, @Param("topicId") Long topicId, @Param("filename") String filename);
 

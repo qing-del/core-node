@@ -112,6 +112,7 @@ services:
       jacolp.aliyun.oss.bucket-name: ${JACOLP_ALIYUN_OSS_BUCKET_NAME}
       jacolp.aliyun.oss.region: ${JACOLP_ALIYUN_OSS_REGION}
       jacolp.aliyun.oss.keep-live-enabled: ${OSS_KEEP_LIVE_ENABLED:-false}
+      # 分享短链跳转到该公开前端地址的 /s/{code}，不要配置为 backend:8080。
       jacolp.app.base-url: ${JACOLP_APP_BASE_URL:-http://localhost}
       jacolp.mail.host: ${JACOLP_MAIL_HOST}
       jacolp.mail.port: ${JACOLP_MAIL_PORT:-465}

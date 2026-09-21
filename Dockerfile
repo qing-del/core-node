@@ -19,6 +19,10 @@ COPY middleware-framework/middleware-markdown-autoconfigure/pom.xml middleware-f
 COPY middleware-framework/middleware-markdown-starter/pom.xml middleware-framework/middleware-markdown-starter/
 COPY middleware-framework/middleware-oss-autoconfigure/pom.xml middleware-framework/middleware-oss-autoconfigure/
 COPY middleware-framework/middleware-oss-starter/pom.xml middleware-framework/middleware-oss-starter/
+COPY middleware-framework/middleware-minio-autoconfigure/pom.xml middleware-framework/middleware-minio-autoconfigure/
+COPY middleware-framework/middleware-minio-starter/pom.xml middleware-framework/middleware-minio-starter/
+COPY middleware-framework/middleware-elasticsearch-autoconfigure/pom.xml middleware-framework/middleware-elasticsearch-autoconfigure/
+COPY middleware-framework/middleware-elasticsearch-starter/pom.xml middleware-framework/middleware-elasticsearch-starter/
 COPY middleware-module-audio/pom.xml middleware-module-audio/
 COPY middleware-module-audio/middleware-module-audio-biz/pom.xml middleware-module-audio/middleware-module-audio-biz/
 COPY middleware-module-audit/pom.xml middleware-module-audit/
@@ -33,6 +37,9 @@ COPY middleware-module-note/middleware-module-note-biz/pom.xml middleware-module
 COPY middleware-module-system/pom.xml middleware-module-system/
 COPY middleware-module-system/middleware-module-system-api/pom.xml middleware-module-system/middleware-module-system-api/
 COPY middleware-module-system/middleware-module-system-biz/pom.xml middleware-module-system/middleware-module-system-biz/
+COPY middleware-module-document/pom.xml middleware-module-document/
+COPY middleware-module-document/middleware-module-document-api/pom.xml middleware-module-document/middleware-module-document-api/
+COPY middleware-module-document/middleware-module-document-biz/pom.xml middleware-module-document/middleware-module-document-biz/
 COPY middleware-server/pom.xml middleware-server/
 
 RUN mvn dependency:go-offline -B

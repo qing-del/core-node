@@ -32,6 +32,22 @@ class ContainerHealthcheckContractTest {
         assertThat(dockerfile).contains("FROM eclipse-temurin:21-jre-alpine");
     }
 
+    @Test
+    void dependencyCacheLayerIncludesDocumentAndStorageModuleDescriptors()
+            throws Exception {
+        String dockerfile = Files.readString(locateRepositoryRoot().resolve("Dockerfile"));
+
+        assertThat(dockerfile)
+                .contains("COPY middleware-framework/middleware-minio-autoconfigure/pom.xml")
+                .contains("COPY middleware-framework/middleware-minio-starter/pom.xml")
+                .contains("COPY middleware-framework/middleware-elasticsearch-autoconfigure/pom.xml")
+                .contains("COPY middleware-framework/middleware-elasticsearch-starter/pom.xml")
+                .contains("COPY middleware-module-document/pom.xml")
+                .contains("COPY middleware-module-document/middleware-module-document-api/pom.xml")
+                .contains("COPY middleware-module-document/middleware-module-document-biz/pom.xml")
+                .contains("RUN mvn dependency:go-offline -B");
+    }
+
     private static Path locateRepositoryRoot() {
         Path directory = Path.of(System.getProperty("user.dir")).toAbsolutePath();
         while (directory != null) {

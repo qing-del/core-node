@@ -79,6 +79,24 @@
                 </foreach>
         </select>
 
+        <select id="selectFileIndexPage" resultMap="NoteEntityMap">
+                SELECT id, user_id, topic_id, title, description,
+                           storage_type, status, missing_info_mask, missing_count, md_file_size,
+                           create_time, update_time
+                FROM biz_note
+                WHERE id &gt; #{afterId}
+                ORDER BY id ASC
+                LIMIT #{limit}
+        </select>
+
+        <select id="selectFileIndexById" resultMap="NoteEntityMap">
+                SELECT id, user_id, topic_id, title, description,
+                           storage_type, status, missing_info_mask, missing_count, md_file_size,
+                           create_time, update_time
+                FROM biz_note
+                WHERE id = #{id}
+        </select>
+
         <select id="selectByUserIdAndTitles" resultMap="NoteEntityMap">
                 SELECT id, user_id, topic_id, title, description,
                            storage_type, status, missing_info_mask, missing_count, md_file_size,

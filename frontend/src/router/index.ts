@@ -3,15 +3,18 @@ import { toastError } from '@/utils/feedback'
 import {
   clearStoredAuth,
   hasAllGrantedScopes,
+  hasGrantedScope,
   readAuthSession,
   type AuthClientId
 } from '@/utils/authSession'
+import { sanitizeShareRedirect, shareLinkCodeFromPath } from '@/utils/shareLink'
 
 declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
     clientId?: AuthClientId
     requiredScopes?: readonly string[]
+    anyRequiredScopes?: readonly string[]
   }
 }
 
@@ -52,6 +55,17 @@ const router = createRouter({
       ]
     },
     {
+      path: '/share/documents/:code',
+      name: 'DocumentShare',
+      component: () => import('@/views/DocumentShare.vue'),
+      // 分享页本身不授予权限；只有已登录 user client 且拥有文档 scope 才能调用 redeem。
+      meta: {
+        requiresAuth: true,
+        clientId: 'user',
+        anyRequiredScopes: ['document:read', 'document:write']
+      }
+    },
+    {
       path: '/dashboard',
       redirect: '/user/dashboard'
     },
@@ -79,6 +93,25 @@ const router = createRouter({
           name: 'UserNotes',
           component: () => import('@/views/user/Notes.vue'),
           meta: { requiredScopes: ['note:read'] }
+        },
+        {
+          // 文档列表本轮仍只需要 read scope；编辑已有文档另行支持 read/write 任一 scope。
+          path: 'documents',
+          name: 'UserDocuments',
+          component: () => import('@/views/user/Documents.vue'),
+          meta: { requiredScopes: ['document:read'] }
+        },
+        {
+          path: 'documents/new',
+          name: 'UserDocumentCreate',
+          component: () => import('@/views/user/DocumentEditor.vue'),
+          meta: { requiredScopes: ['document:write'] }
+        },
+        {
+          path: 'documents/:documentId',
+          name: 'UserDocumentEditor',
+          component: () => import('@/views/user/DocumentEditor.vue'),
+          meta: { anyRequiredScopes: ['document:read', 'document:write'] }
         },
         {
           path: 'notes/new',
@@ -194,6 +227,12 @@ const router = createRouter({
           meta: { requiredScopes: ['note:read'] }
         },
         {
+          path: 'documents',
+          name: 'AdminDocuments',
+          component: () => import('@/views/admin/Documents.vue'),
+          meta: { requiredScopes: ['document:read'] }
+        },
+        {
           path: 'topics',
           name: 'AdminTopics',
           component: () => import('@/views/admin/Topics.vue'),
@@ -238,18 +277,37 @@ const router = createRouter({
 router.beforeEach((to) => {
   const session = readAuthSession()
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const isShareRoute = to.name === 'DocumentShare'
+  const shareRedirect = sanitizeShareRedirect(to.path)
+
+  // Malformed codes are rendered as a neutral invalid-link state without ever
+  // being sent to an API or used to build a redirect.
+  if (isShareRoute && !shareLinkCodeFromPath(to.path)) return true
 
   if (!session.accessToken) {
-    return requiresAuth ? '/login' : true
+    return requiresAuth
+      ? shareRedirect ? { path: '/login', query: { redirect: shareRedirect } } : '/login'
+      : true
   }
 
   if (!session.clientId) {
     clearStoredAuth()
-    return '/login'
+    return shareRedirect ? { path: '/login', query: { redirect: shareRedirect } } : '/login'
   }
 
   if (to.path === '/login' || to.path === '/') {
+    if (to.path === '/login' && session.clientId === 'user') {
+      const redirect = sanitizeShareRedirect(to.query.redirect)
+      if (redirect) return redirect
+    }
     return session.clientId === 'admin' ? '/admin' : '/user'
+  }
+
+  if (isShareRoute && session.clientId !== 'user') {
+    // An admin token must never reach redeem. Clear the client boundary and
+    // restart through the user login entry while preserving only this route.
+    clearStoredAuth()
+    return shareRedirect ? { path: '/login', query: { redirect: shareRedirect } } : '/login'
   }
 
   if (!requiresAuth) return true
@@ -264,6 +322,12 @@ router.beforeEach((to) => {
 
   const requiredScopes = [...new Set(to.matched.flatMap(record => record.meta.requiredScopes ?? []))]
   if (!hasAllGrantedScopes(session.scopes, requiredScopes)) {
+    toastError('当前账号没有访问此页面的权限')
+    return false
+  }
+
+  const anyRequiredScopes = [...new Set(to.matched.flatMap(record => record.meta.anyRequiredScopes ?? []))]
+  if (anyRequiredScopes.length > 0 && !anyRequiredScopes.some(scope => hasGrantedScope(session.scopes, scope))) {
     toastError('当前账号没有访问此页面的权限')
     return false
   }

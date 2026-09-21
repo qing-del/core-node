@@ -11,6 +11,14 @@ public interface UserProfileApi {
 
     Map<Long, UserProfile> getProfilesByIds(Collection<Long> userIds);
 
+    /**
+     * Checks whether an account exists and is currently enabled for business operations.
+     *
+     * <p>The method deliberately returns {@code false} for both unknown and inactive users
+     * so callers do not need to depend on the system module's persistence model.</p>
+     */
+    boolean isActiveUser(long userId);
+
     record UserProfile(long userId, String username, String nickname) {
 
         public UserProfile {

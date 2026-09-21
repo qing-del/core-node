@@ -53,6 +53,20 @@ class ImmutableBusinessRouteAuthorizationPolicyTest {
     }
 
     @Test
+    void supportsRoutesThatAcceptAnyOneOfTheirRequiredScopes() {
+        ImmutableBusinessRouteAuthorizationPolicy anyScopePolicy = new ImmutableBusinessRouteAuthorizationPolicy(List.of(
+                new BusinessRouteAuthorizationEntry(HttpMethod.POST, "/user/document/share-links/{code}/redeem",
+                        Set.of("document:read", "document:write"), "user", true)));
+
+        assertThat(anyScopePolicy.authorize(HttpMethod.POST, "/user/document/share-links/abc/redeem",
+                principal("user", List.of("USER"), List.of("document:read")))).isEqualTo(ALLOW);
+        assertThat(anyScopePolicy.authorize(HttpMethod.POST, "/user/document/share-links/abc/redeem",
+                principal("user", List.of("USER"), List.of("document:write")))).isEqualTo(ALLOW);
+        assertThat(anyScopePolicy.authorize(HttpMethod.POST, "/user/document/share-links/abc/redeem",
+                principal("user", List.of("USER"), List.of("note:read")))).isEqualTo(SCOPE_MISMATCH);
+    }
+
+    @Test
     void usesSpringPathPatternsAndHttpMethodAsPartOfTheRouteIdentity() {
         assertThat(policy.authorize(HttpMethod.GET, "/user/note/123",
                 principal("user", List.of("USER"), List.of("note:read")))).isEqualTo(ALLOW);

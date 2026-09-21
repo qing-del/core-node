@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.jacolp.document.infrastructure.persistence.mapper.DocumentMapper">
+
+    <resultMap id="DocumentMap" type="com.jacolp.document.infrastructure.persistence.dataobject.DocumentDO">
+        <id column="id" property="id"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="title" property="title"/>
+        <result column="content_object_key" property="contentObjectKey"/>
+        <result column="persisted_log_id" property="persistedLogId"/>
+        <result column="last_modify_time" property="lastModifyTime"/>
+        <result column="last_modify_user_id" property="lastModifyUserId"/>
+        <result column="deleted" property="deleted"/>
+        <result column="version" property="version"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="DocumentColumns">
+        id, owner_user_id, title, content_object_key, persisted_log_id, last_modify_time,
+        last_modify_user_id, deleted, version, create_time, update_time
+    </sql>
+
+    <insert id="insert" parameterType="com.jacolp.document.infrastructure.persistence.dataobject.DocumentDO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO biz_document
+        (owner_user_id, title, content_object_key, persisted_log_id, last_modify_time,
+         last_modify_user_id, deleted, version)
+        VALUES
+        (#{ownerUserId}, #{title}, #{contentObjectKey}, #{persistedLogId}, #{lastModifyTime},
+         #{lastModifyUserId}, #{deleted}, #{version})
+    </insert>
+
+    <select id="selectById" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectActiveById" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE id = #{id}
+          AND deleted = 0
+    </select>
+
+    <select id="selectActiveByIds" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE deleted = 0
+          AND id IN
+          <foreach collection="ids" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
+    </select>
+
+    <select id="selectByIdAfter" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE id &gt; #{afterId}
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="listActiveByOwnerUserId" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE owner_user_id = #{ownerUserId}
+          AND deleted = 0
+        ORDER BY last_modify_time DESC, id DESC
+    </select>
+
+    <select id="listActiveVisibleByUserId" resultMap="DocumentMap">
+        SELECT d.id, d.owner_user_id, d.title, d.content_object_key, d.persisted_log_id, d.last_modify_time,
+               d.last_modify_user_id, d.deleted, d.version, d.create_time, d.update_time
+        FROM biz_document d
+        LEFT JOIN biz_document_user du
+            ON du.document_id = d.id
+           AND du.user_id = #{userId}
+           AND du.enabled = 1
+           AND du.permission IN ('READ', 'WRITE')
+        WHERE d.deleted = 0
+          AND (
+              d.owner_user_id = #{userId}
+              OR du.document_id IS NOT NULL
+          )
+        ORDER BY d.last_modify_time DESC, d.id DESC
+    </select>
+
+    <select id="listActiveForAdmin" resultMap="DocumentMap">
+        SELECT <include refid="DocumentColumns"/>
+        FROM biz_document
+        WHERE deleted = 0
+        ORDER BY owner_user_id ASC, last_modify_time DESC, id DESC
+    </select>
+
+    <update id="updateLastModificationIfActive">
+        UPDATE biz_document
+        SET last_modify_time = #{lastModifyTime},
+            last_modify_user_id = #{lastModifyUserId},
+            version = version + 1
+        WHERE id = #{id}
+          AND deleted = 0
+          AND (
+              owner_user_id = #{userId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM biz_document_user
+                  WHERE document_id = biz_document.id
+                    AND user_id = #{userId}
+                    AND enabled = 1
+                    AND permission = 'WRITE'
+              )
+          )
+    </update>
+
+    <update id="updateTitleIfActive">
+        UPDATE biz_document
+        SET title = #{title},
+            last_modify_time = #{lastModifyTime},
+            last_modify_user_id = #{lastModifyUserId},
+            version = version + 1
+        WHERE id = #{id}
+          AND owner_user_id = #{ownerUserId}
+          AND deleted = 0
+    </update>
+
+    <update id="updateSnapshotPointerIfPersistedLogId">
+        UPDATE biz_document
+        SET content_object_key = #{contentObjectKey},
+            persisted_log_id = #{persistedLogId},
+            version = version + 1
+        WHERE id = #{id}
+          AND persisted_log_id = #{expectedPersistedLogId}
+          AND deleted = 0
+    </update>
+
+    <update id="softDeleteByIdAndOwnerUserId">
+        UPDATE biz_document
+        SET deleted = 1,
+            last_modify_time = #{lastModifyTime},
+            last_modify_user_id = #{lastModifyUserId},
+            version = version + 1
+        WHERE id = #{id}
+          AND owner_user_id = #{ownerUserId}
+          AND deleted = 0
+    </update>
+</mapper>

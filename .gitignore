@@ -3,6 +3,7 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+*.DS_Store
 
 ### STS ###
 .apt_generated
@@ -75,3 +76,4 @@ AGENTS.md
 /resource/key/
 **/src/main/resources/key/
 /middleware-module-system/middleware-module-system-biz/src/main/resources/oauth2-rs256/
+/middleware-server/src/main/resources/application-dev.yml

@@ -66,8 +66,10 @@ class MigrationScriptTest {
             throws IOException {
         String migration = readMigration("20260812_phase5_business_route_scopes.sql");
         String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
-        String userScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,media:read,media:write,note:read,note:write";
-        String adminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,media:read,media:manage,note:read,note:manage";
+        String phaseFiveUserScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,media:read,media:write,note:read,note:write";
+        String bootstrapUserScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,"
+                + "document:read,document:write,media:read,media:write,note:read,note:write";
+        String adminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,document:read,document:write,media:read,media:manage,note:read,note:manage";
 
         assertThat(migration)
                 .contains("phase5_business_route_scopes_preflight")
@@ -79,10 +81,10 @@ class MigrationScriptTest {
                 .contains("BINARY `client_id` = 'core_agent'")
                 .contains("BINARY `scopes` = 'note:read,note:write,sys:read,media:read'")
                 .contains("'*:read', '*:write', '*:manage', '*:super'")
-                .contains(userScopes)
+                .contains(phaseFiveUserScopes)
                 .contains(adminScopes);
         assertThat(bootstrap)
-                .contains(userScopes)
+                .contains(bootstrapUserScopes)
                 .contains(adminScopes)
                 .contains("('account:read', NULL, 'account', 'read', 'active'")
                 .contains("('audit:manage', NULL, 'audit', 'manage', 'active'")
@@ -104,6 +106,109 @@ class MigrationScriptTest {
                 .contains("BINARY `allowed_ips` = '0.0.0.0/0'")
                 .contains("SET `allowed_ips` = '0.0.0.0/0,::/0'")
                 .doesNotContain("core_agent");
+    }
+
+    @Test
+    void documentPersistenceFreshSchemaShouldUseOwnerAndAuthorizationTables() throws IOException {
+        String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
+        String historicalMigration = readMigration("20260823_document_persistence_model.sql");
+        String authorizationMigration = readMigration("20260830_document_user_authorization.sql");
+
+        assertThat(bootstrap)
+                .contains("CREATE TABLE `biz_document`")
+                .contains("`owner_user_id`       bigint       NOT NULL")
+                .contains("`persisted_log_id`    bigint       NOT NULL DEFAULT 0")
+                .contains("KEY `idx_document_owner_deleted_time` (`owner_user_id`, `deleted`, `last_modify_time`)")
+                .doesNotContain("`team_id`")
+                .contains("CREATE TABLE `biz_document_user`")
+                .contains("PRIMARY KEY (`document_id`, `user_id`)")
+                .contains("KEY `idx_document_user_visible` (`user_id`, `enabled`, `document_id`)")
+                .contains("CREATE TABLE `document_op_log`")
+                .contains("UNIQUE KEY `uk_document_redis_op` (`document_id`, `redis_op_id`)")
+                .contains("UNIQUE KEY `uk_document_client_update` (`document_id`, `client_update_id`)");
+        int documentUserStart = bootstrap.indexOf("CREATE TABLE `biz_document_user`");
+        int documentOpLogStart = bootstrap.indexOf("CREATE TABLE `document_op_log`", documentUserStart);
+        assertThat(documentUserStart).isGreaterThanOrEqualTo(0);
+        assertThat(documentOpLogStart).isGreaterThan(documentUserStart);
+        assertThat(bootstrap.substring(documentUserStart, documentOpLogStart))
+                .contains("KEY `idx_document_user_visible` (`user_id`, `enabled`, `document_id`)")
+                .doesNotContain("KEY `idx_user_id` (`user_id`)");
+        assertThat(historicalMigration)
+                .contains("USE `personal_saas`;");
+        assertThat(authorizationMigration)
+                .contains("ADD COLUMN `owner_user_id`")
+                .contains("SET `owner_user_id` = `team_id`")
+                .contains("CREATE TABLE `biz_document_user`")
+                .contains("document_user_authorization_retire_team_preflight")
+                .contains("document_user_authorization_retire_team_postflight")
+                .doesNotContain("ADD KEY `idx_user_id` (`user_id`)");
+    }
+
+    @Test
+    void documentAuthorizationMigrationShouldRetireTeamAfterOwnerBackfill()
+            throws IOException {
+        String migration = readMigration("20260830_document_user_authorization.sql");
+
+        assertThat(migration)
+                .contains("document_user_authorization_retire_team_preflight")
+                .contains("document_user_authorization_retire_team_postflight")
+                .contains("owner_user_id")
+                .contains("owner_user_id` IS NULL")
+                .contains("idx_document_owner_deleted_time")
+                .contains("idx_document_scope_deleted_time")
+                .contains("DROP INDEX `idx_document_scope_deleted_time`")
+                .contains("DROP COLUMN `team_id`");
+        assertThat(migration.indexOf("CALL `document_user_authorization_retire_team_preflight`()"))
+                .isLessThan(migration.indexOf("DROP COLUMN `team_id`"));
+        assertThat(migration.indexOf("DROP COLUMN `team_id`"))
+                .isLessThan(migration.indexOf("CALL `document_user_authorization_retire_team_postflight`()"));
+        int ownerBackfill = migration.indexOf("SET `owner_user_id` = `team_id`");
+        int ownerConstraint = migration.indexOf("MODIFY COLUMN `owner_user_id`");
+        int authorizationTable = migration.indexOf("CREATE TABLE `biz_document_user`");
+        int retirePreflight = migration.indexOf("CALL `document_user_authorization_retire_team_preflight`()");
+        assertThat(ownerBackfill).isGreaterThanOrEqualTo(0);
+        assertThat(ownerConstraint).isGreaterThan(ownerBackfill);
+        assertThat(authorizationTable).isGreaterThan(ownerConstraint);
+        assertThat(retirePreflight).isGreaterThan(authorizationTable);
+        assertThat(migration)
+                .doesNotContain("document_user_authorization_idx_user_id")
+                .doesNotContain("ADD KEY `idx_user_id` (`user_id`)");
+    }
+
+    @Test
+    void documentScopesShouldBeAvailableToTheUserClientAndPermissionCatalogue() throws IOException {
+        String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
+        String migration = readMigration("20260824_document_oauth_scopes.sql");
+        String userScopes = "account:read,account:write,audio:read,audio:write,audit:read,audit:write,"
+                + "document:read,document:write,media:read,media:write,note:read,note:write";
+
+        assertThat(bootstrap)
+                .contains(userScopes)
+                .contains("('document:read', NULL, 'document', 'read', 'active'")
+                .contains("('document:write', NULL, 'document', 'write', 'active'");
+        assertThat(migration)
+                .contains("document_oauth_scopes_preflight")
+                .contains("document_oauth_scopes_postflight")
+                .contains("'document:read'")
+                .contains("'document:write'")
+                .contains(userScopes)
+                .contains("v_document_permission_count <> 2")
+                .contains("v_user_client_count <> 1");
+    }
+
+    @Test
+    void adminDocumentScopesShouldBeEnabledForTheInternalAdminClient() throws IOException {
+        String bootstrap = Files.readString(locateMigrationDirectory().getParent().resolve("createDatabase.sql"));
+        String migration = readMigration("20260920_admin_document_oauth_scopes.sql");
+        String bootstrapAdminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,"
+                + "document:read,document:write,media:read,media:manage,note:read,note:manage";
+        String migrationAdminScopes = "account:read,account:manage,audio:read,audio:manage,audit:read,audit:manage,"
+                + "document:read,document:manage,media:read,media:manage,note:read,note:manage";
+
+        assertThat(bootstrap).contains(bootstrapAdminScopes);
+        assertThat(migration)
+                .contains("BINARY `client_id` = 'admin'")
+                .contains(migrationAdminScopes);
     }
 
     private static String readMigration(String fileName) throws IOException {

@@ -11,6 +11,7 @@ import com.jacolp.system.infrastructure.persistence.dataobject.UserDO;
 import com.jacolp.system.infrastructure.persistence.mapper.ApiDailyUsageMapper;
 import com.jacolp.system.infrastructure.persistence.mapper.UserMapper;
 import com.jacolp.system.utils.RoleDataComputerUtil;
+import com.jacolp.constant.UserConstant;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,6 +29,26 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class UserApiServiceTest {
+
+    @Test
+    void activeUserContractRejectsUnknownAndInactiveAccounts() {
+        UserMapper userMapper = mock(UserMapper.class);
+        UserDO active = new UserDO();
+        active.setId(7L);
+        active.setStatus(UserConstant.ACTIVE_STATUS);
+        UserDO inactive = new UserDO();
+        inactive.setId(8L);
+        inactive.setStatus(UserConstant.UNACTIVE_STATUS);
+        when(userMapper.selectById(7L)).thenReturn(active);
+        when(userMapper.selectById(8L)).thenReturn(inactive);
+        when(userMapper.selectById(9L)).thenReturn(null);
+
+        UserProfileApiService service = new UserProfileApiService(userMapper);
+
+        assertTrue(service.isActiveUser(7L));
+        assertFalse(service.isActiveUser(8L));
+        assertFalse(service.isActiveUser(9L));
+    }
 
     @Test
     void userProfilesAreMappedFromOneBatchMapperCall() {

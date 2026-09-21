@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
   ChevronLeft, Shield, LayoutDashboard, ShieldAlert, Users, FileText,
-  Layers, Hash, Image as ImageIcon, Mail, Power, Search, Bell, Music
+  Layers, Hash, Image as ImageIcon, Mail, Power, Search, Bell, Music, FolderTree
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -19,6 +19,7 @@ const menuItems = computed(() => [
   { id: 'audit', label: '审核大厅', icon: ShieldAlert, to: '/admin/audit' },
   { id: 'users', label: '用户管理', icon: Users, to: '/admin/users' },
   { id: 'notes', label: '全局笔记', icon: FileText, to: '/admin/notes' },
+  { id: 'documents', label: '协作文档', icon: FolderTree, to: '/admin/documents' },
   { id: 'topics', label: '主题调度', icon: Layers, to: '/admin/topics' },
   { id: 'tags', label: '标签矩阵', icon: Hash, to: '/admin/tags' },
   { id: 'images', label: '云端图床', icon: ImageIcon, to: '/admin/images' },

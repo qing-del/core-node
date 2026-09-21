@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { resolvePostLoginDestination, sanitizeShareRedirect } from '@/utils/shareLink'
 import {
   Zap, ChevronRight, Link, FileDiff, User, Mail, Lock,
   ShieldCheck, Loader2, ArrowRight, CheckCircle2, XCircle, BookOpen, Send, KeyRound
 } from 'lucide-vue-next'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 type AuthView = 'login' | 'register' | 'admin' | 'activation'
@@ -329,6 +331,23 @@ function enterGuestMode() {
   router.push('/guest/notes')
 }
 
+/** 登录回跳只接受路由守卫认可的本站分享路径。 */
+function completeLogin(clientId: 'user' | 'admin'): void {
+  const redirect = sanitizeShareRedirect(route.query.redirect)
+  if (clientId === 'admin' && redirect) {
+    // admin token 不能用于 redeem；清理后回到 user 登录视图，避免把 admin
+    // 会话带到分享页面或让路由守卫反复拦截。
+    authStore.clearSession({ withServer: false, redirect: false })
+    showToast('分享链接需要使用用户账号登录', 'error')
+    void setView('login')
+    return
+  }
+
+  window.setTimeout(() => {
+    void router.replace(resolvePostLoginDestination(clientId, redirect))
+  }, 1000)
+}
+
 function fillActivationAccount() {
   activationAccount.value = formData.email || formData.username || activationAccount.value
 }
@@ -454,9 +473,7 @@ async function handleSubmit() {
         await authStore.adminLogin({ username: formData.username, password: formData.password })
       }
       showToast('安全认证通过...', 'success')
-      setTimeout(() => {
-        router.push('/admin')
-      }, 1000)
+      completeLogin('admin')
     } else if (currentView.value === 'register') {
       const message = await authStore.register({
         username: formData.username,
@@ -476,9 +493,7 @@ async function handleSubmit() {
         await authStore.login({ username: formData.username, password: formData.password })
       }
       showToast('安全认证通过...', 'success')
-      setTimeout(() => {
-        router.push('/user')
-      }, 1000)
+      completeLogin('user')
     }
   } catch (error: any) {
     const message = safeErrorMessage(error, '操作失败')

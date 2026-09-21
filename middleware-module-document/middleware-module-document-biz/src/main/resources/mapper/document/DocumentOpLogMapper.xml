@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.jacolp.document.infrastructure.persistence.mapper.DocumentOpLogMapper">
+
+    <resultMap id="DocumentOpLogMap" type="com.jacolp.document.infrastructure.persistence.dataobject.DocumentOpLogDO">
+        <id column="id" property="id"/>
+        <result column="document_id" property="documentId"/>
+        <result column="redis_op_id" property="redisOpId"/>
+        <result column="client_update_id" property="clientUpdateId"/>
+        <result column="update_data" property="updateData"/>
+        <result column="operator_id" property="operatorId"/>
+        <result column="operator_type" property="operatorType"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <insert id="insertBatchIgnoringDuplicates">
+        INSERT INTO document_op_log
+        (document_id, redis_op_id, client_update_id, update_data, operator_id, operator_type, create_time)
+        VALUES
+        <foreach collection="logs" item="log" separator=",">
+            (#{log.documentId}, #{log.redisOpId}, #{log.clientUpdateId}, #{log.updateData},
+             #{log.operatorId}, #{log.operatorType}, #{log.createTime})
+        </foreach>
+        ON DUPLICATE KEY UPDATE document_id = document_id
+    </insert>
+
+    <select id="selectByDocumentIdAfterId" resultMap="DocumentOpLogMap">
+        SELECT id, document_id, redis_op_id, client_update_id, update_data, operator_id, operator_type, create_time
+        FROM document_op_log
+        WHERE document_id = #{documentId}
+          AND id &gt; #{afterId}
+        ORDER BY id ASC
+        <if test="limit != null">LIMIT #{limit}</if>
+    </select>
+
+    <select id="countByDocumentIdAfterId" resultType="long">
+        SELECT COUNT(1)
+        FROM document_op_log
+        WHERE document_id = #{documentId}
+          AND id &gt; #{afterId}
+    </select>
+
+    <delete id="deleteByDocumentIdThroughId">
+        DELETE FROM document_op_log
+        WHERE document_id = #{documentId}
+          AND id &lt;= #{throughId}
+    </delete>
+</mapper>
