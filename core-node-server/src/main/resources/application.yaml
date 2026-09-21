@@ -1,0 +1,157 @@
+spring:
+  profiles:
+    active: home
+  application:
+    name: core-node-server
+  ai:
+    model:
+      chat: openai
+    openai:
+      base-url: ${AI_OPENAI_BASE_URL:https://api.openai.com}
+      api-key: ${AI_OPENAI_API_KEY}
+      chat:
+        model: ${AI_OPENAI_CHAT_MODEL}
+    chat:
+      client:
+        tool-calling:
+          enabled: false
+  datasource:
+    url: jdbc:mysql://${jacolp.datasource.host}:${jacolp.datasource.port}/${jacolp.datasource.database}
+    username: ${jacolp.datasource.username}
+    password: ${jacolp.datasource.password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      keep-alive-time: 50000  # 50 秒尝试一次保持 TCP 连接（可以用于分布式的时候防止NAT老化）
+      connection-test-query: SELECT 1
+      minimum-idle: 5 # 最小空闲连接数（预热）
+      maximum-pool-size: 20 # 最大连接数
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 2MB
+      max-request-size: 5MB
+  data:
+    redis:
+      host: ${jacolp.redis.host}
+      port: ${jacolp.redis.port}
+      password: ${jacolp.redis.password}
+      lettuce: # 默认使用 Lettuce
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 100ms
+  rabbitmq:
+    host: ${RABBITMQ_HOST:${jacolp.rabbitmq.host}}
+    port: ${RABBITMQ_PORT:${jacolp.rabbitmq.port}}
+    username: ${RABBITMQ_USERNAME:${jacolp.rabbitmq.username}}
+    password: ${RABBITMQ_PASSWORD:${jacolp.rabbitmq.password}}
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        default-requeue-rejected: false
+        missing-queues-fatal: false
+  mail:
+    host: ${jacolp.mail.host}
+    port: ${jacolp.mail.port}
+    username: ${jacolp.mail.username}
+    password: ${jacolp.mail.password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          socketFactory:
+            port: 465
+            class: javax.net.ssl.SSLSocketFactory
+
+server:
+  servlet:
+    session:
+      timeout: 10m
+      cookie:
+        http-only: true
+        same-site: lax
+        # 生产环境必须通过 TLS 并将该值设为 true；本地 127.0.0.1 HTTP 保持 false。
+        secure: ${OAUTH_SESSION_COOKIE_SECURE:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+jacolp:
+  web:
+    cors:
+      # Keep the current behavior by default; narrow this list per deployment profile.
+      allowed-origin-patterns: ${jacolp.web.cors.allowed-origin-patterns}
+      allowed-methods: ${jacolp.web.cors.allowed-methods}
+      allowed-headers: ${jacolp.web.cors.allowed-headers}
+      exposed-headers: ${jacolp.web.cors.exposed-headers}
+      allow-credentials: ${jacolp.web.cors.allow-credentials}
+      allow-private-network: ${jacolp.web.cors.allow-private-network}
+      max-age: ${jacolp.web.cors.max-age}
+  messaging:
+    enabled: ${MESSAGING_ENABLED:true}
+    batch-size: ${MESSAGING_OUTBOX_BATCH_SIZE:100}
+    shard-size: ${MESSAGING_SHARD_SIZE:100}
+    max-retries: ${MESSAGING_MAX_RETRIES:8}
+    poll-delay-ms: ${MESSAGING_POLL_DELAY_MS:1000}
+    claim-seconds: ${MESSAGING_CLAIM_SECONDS:60}
+    confirm-timeout-ms: ${MESSAGING_CONFIRM_TIMEOUT_MS:10000}
+    retry-queue-delay-ms: ${MESSAGING_RETRY_DELAY_MS:10000}
+    max-payload-bytes: ${MESSAGING_MAX_PAYLOAD_BYTES:262144}
+    initial-backoff: ${MESSAGING_INITIAL_BACKOFF:2s}
+    max-backoff: ${MESSAGING_MAX_BACKOFF:5m}
+  admin:
+    username: ${jacolp.admin.username}
+    password: ${jacolp.admin.password}
+    email: ${jacolp.admin.email}
+  default-password: ${jacolp.default-password}  # 默认测试密码
+  oauth2:
+    browser-login:
+      csrf-enabled: ${jacolp.oauth2.browser-login.csrf-enabled:false}
+    rs256:
+      issuer: ${OAUTH2_RS256_ISSUER:core-node}
+      audience: ${OAUTH2_RS256_AUDIENCE:core-node-api}
+      private-key-location: ${jacolp.oauth2.rs256.private-key-location}
+      public-key-location: ${jacolp.oauth2.rs256.public-key-location}
+  jwt:
+    active-secret-key: ${jacolp.jwt.active-secret-key}
+    active-ttl: 900000  # 15 分钟
+    active-code-ttl: 300000  # 5 分钟
+    active-token-name: ${jacolp.jwt.active-token-name}
+  markdown:
+    root: ${jacolp.markdown.root}
+    input-dir: ${jacolp.markdown.input}
+    output-dir: ${jacolp.markdown.output}
+  base-url: ${jacolp.app.base-url}
+  aliyun:
+    oss:
+      keep-live-time: 45  # 单位是秒
+      keep-live-enabled: ${OSS_KEEP_LIVE_ENABLED:false}
+      enabled: true
+  audio:
+    callback-token: ${jacolp.audio.callback-token}
+    queue-type: ${AUDIO_QUEUE_TYPE:redis-stream}
+  image:
+    delete-image-task-time: 60 # 单位是分钟
+
+aliyun:
+  oss:
+    endpoint: https://${jacolp.aliyun.oss.endpoint}
+    bucket-name: ${jacolp.aliyun.oss.bucket-name}
+    region: ${jacolp.aliyun.oss.region}
+
+# 开启驼峰命名转换
+mybatis:
+  mapper-locations: classpath*:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true

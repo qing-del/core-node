@@ -1,5 +1,5 @@
 # ============================================================
-# Middleware Spring Boot backend image
+# CoreNode Spring Boot backend image
 # ============================================================
 
 # ---------- Stage 1: Maven build ----------
@@ -9,47 +9,47 @@ WORKDIR /build
 
 # Copy every current Maven descriptor first so dependency resolution is cached.
 COPY pom.xml .
-COPY middleware-dependencies/pom.xml middleware-dependencies/
-COPY middleware-common/pom.xml middleware-common/
-COPY middleware-common/middleware-common-core/pom.xml middleware-common/middleware-common-core/
-COPY middleware-common/middleware-common-security/pom.xml middleware-common/middleware-common-security/
-COPY middleware-common/middleware-common-web/pom.xml middleware-common/middleware-common-web/
-COPY middleware-framework/pom.xml middleware-framework/
-COPY middleware-framework/middleware-markdown-autoconfigure/pom.xml middleware-framework/middleware-markdown-autoconfigure/
-COPY middleware-framework/middleware-markdown-starter/pom.xml middleware-framework/middleware-markdown-starter/
-COPY middleware-framework/middleware-oss-autoconfigure/pom.xml middleware-framework/middleware-oss-autoconfigure/
-COPY middleware-framework/middleware-oss-starter/pom.xml middleware-framework/middleware-oss-starter/
-COPY middleware-framework/middleware-minio-autoconfigure/pom.xml middleware-framework/middleware-minio-autoconfigure/
-COPY middleware-framework/middleware-minio-starter/pom.xml middleware-framework/middleware-minio-starter/
-COPY middleware-framework/middleware-elasticsearch-autoconfigure/pom.xml middleware-framework/middleware-elasticsearch-autoconfigure/
-COPY middleware-framework/middleware-elasticsearch-starter/pom.xml middleware-framework/middleware-elasticsearch-starter/
-COPY middleware-module-audio/pom.xml middleware-module-audio/
-COPY middleware-module-audio/middleware-module-audio-biz/pom.xml middleware-module-audio/middleware-module-audio-biz/
-COPY middleware-module-audit/pom.xml middleware-module-audit/
-COPY middleware-module-audit/middleware-module-audit-api/pom.xml middleware-module-audit/middleware-module-audit-api/
-COPY middleware-module-audit/middleware-module-audit-biz/pom.xml middleware-module-audit/middleware-module-audit-biz/
-COPY middleware-module-media/pom.xml middleware-module-media/
-COPY middleware-module-media/middleware-module-media-api/pom.xml middleware-module-media/middleware-module-media-api/
-COPY middleware-module-media/middleware-module-media-biz/pom.xml middleware-module-media/middleware-module-media-biz/
-COPY middleware-module-note/pom.xml middleware-module-note/
-COPY middleware-module-note/middleware-module-note-api/pom.xml middleware-module-note/middleware-module-note-api/
-COPY middleware-module-note/middleware-module-note-biz/pom.xml middleware-module-note/middleware-module-note-biz/
-COPY middleware-module-system/pom.xml middleware-module-system/
-COPY middleware-module-system/middleware-module-system-api/pom.xml middleware-module-system/middleware-module-system-api/
-COPY middleware-module-system/middleware-module-system-biz/pom.xml middleware-module-system/middleware-module-system-biz/
-COPY middleware-module-document/pom.xml middleware-module-document/
-COPY middleware-module-document/middleware-module-document-api/pom.xml middleware-module-document/middleware-module-document-api/
-COPY middleware-module-document/middleware-module-document-biz/pom.xml middleware-module-document/middleware-module-document-biz/
-COPY middleware-open-api/pom.xml middleware-open-api/
-COPY middleware-agent/pom.xml middleware-agent/
-COPY middleware-server/pom.xml middleware-server/
+COPY core-node-dependencies/pom.xml core-node-dependencies/
+COPY core-node-common/pom.xml core-node-common/
+COPY core-node-common/core-node-common-core/pom.xml core-node-common/core-node-common-core/
+COPY core-node-common/core-node-common-security/pom.xml core-node-common/core-node-common-security/
+COPY core-node-common/core-node-common-web/pom.xml core-node-common/core-node-common-web/
+COPY core-node-framework/pom.xml core-node-framework/
+COPY core-node-framework/core-node-markdown-autoconfigure/pom.xml core-node-framework/core-node-markdown-autoconfigure/
+COPY core-node-framework/core-node-markdown-starter/pom.xml core-node-framework/core-node-markdown-starter/
+COPY core-node-framework/core-node-oss-autoconfigure/pom.xml core-node-framework/core-node-oss-autoconfigure/
+COPY core-node-framework/core-node-oss-starter/pom.xml core-node-framework/core-node-oss-starter/
+COPY core-node-framework/core-node-minio-autoconfigure/pom.xml core-node-framework/core-node-minio-autoconfigure/
+COPY core-node-framework/core-node-minio-starter/pom.xml core-node-framework/core-node-minio-starter/
+COPY core-node-framework/core-node-elasticsearch-autoconfigure/pom.xml core-node-framework/core-node-elasticsearch-autoconfigure/
+COPY core-node-framework/core-node-elasticsearch-starter/pom.xml core-node-framework/core-node-elasticsearch-starter/
+COPY core-node-module-audio/pom.xml core-node-module-audio/
+COPY core-node-module-audio/core-node-module-audio-biz/pom.xml core-node-module-audio/core-node-module-audio-biz/
+COPY core-node-module-audit/pom.xml core-node-module-audit/
+COPY core-node-module-audit/core-node-module-audit-api/pom.xml core-node-module-audit/core-node-module-audit-api/
+COPY core-node-module-audit/core-node-module-audit-biz/pom.xml core-node-module-audit/core-node-module-audit-biz/
+COPY core-node-module-media/pom.xml core-node-module-media/
+COPY core-node-module-media/core-node-module-media-api/pom.xml core-node-module-media/core-node-module-media-api/
+COPY core-node-module-media/core-node-module-media-biz/pom.xml core-node-module-media/core-node-module-media-biz/
+COPY core-node-module-note/pom.xml core-node-module-note/
+COPY core-node-module-note/core-node-module-note-api/pom.xml core-node-module-note/core-node-module-note-api/
+COPY core-node-module-note/core-node-module-note-biz/pom.xml core-node-module-note/core-node-module-note-biz/
+COPY core-node-module-system/pom.xml core-node-module-system/
+COPY core-node-module-system/core-node-module-system-api/pom.xml core-node-module-system/core-node-module-system-api/
+COPY core-node-module-system/core-node-module-system-biz/pom.xml core-node-module-system/core-node-module-system-biz/
+COPY core-node-module-document/pom.xml core-node-module-document/
+COPY core-node-module-document/core-node-module-document-api/pom.xml core-node-module-document/core-node-module-document-api/
+COPY core-node-module-document/core-node-module-document-biz/pom.xml core-node-module-document/core-node-module-document-biz/
+COPY core-node-open-api/pom.xml core-node-open-api/
+COPY core-node-agent/pom.xml core-node-agent/
+COPY core-node-server/pom.xml core-node-server/
 
 RUN mvn dependency:go-offline -B
 
 # Copy the current project sources after the dependency cache layer.
 COPY . .
 
-RUN mvn clean package -pl middleware-server -am -DskipTests -B -Dmaven.test.skip=true
+RUN mvn clean package -pl core-node-server -am -DskipTests -B -Dmaven.test.skip=true
 
 # ---------- Stage 2: runtime image ----------
 FROM eclipse-temurin:21-jre-alpine
@@ -58,7 +58,7 @@ WORKDIR /app
 
 RUN mkdir -p /app/data/markdown/input /app/data/markdown/output
 
-COPY --from=builder /build/middleware-server/target/*.jar app.jar
+COPY --from=builder /build/core-node-server/target/*.jar app.jar
 COPY application-docker.yml /app/config/application.yml
 
 EXPOSE 8080

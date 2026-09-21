@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>com.jacolp</groupId><artifactId>core-node-module-document</artifactId><version>0.0.1-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+    <artifactId>core-node-module-document-biz</artifactId>
+    <dependencies>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-module-document-api</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-module-note-api</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-module-media-api</artifactId></dependency>
+        <dependency><groupId>com.alibaba.otter</groupId><artifactId>canal.client</artifactId></dependency>
+        <dependency><groupId>com.alibaba.otter</groupId><artifactId>canal.protocol</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-module-system-api</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-common-core</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-common-messaging</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-common-security</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-common-web</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-minio-starter</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-elasticsearch-starter</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-validation</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>
+        <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-core</artifactId></dependency>
+        <dependency><groupId>org.springframework</groupId><artifactId>spring-websocket</artifactId></dependency>
+        <dependency><groupId>org.mybatis.spring.boot</groupId><artifactId>mybatis-spring-boot-starter</artifactId></dependency>
+        <dependency><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><optional>true</optional></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    </dependencies>
+</project>

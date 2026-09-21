@@ -26,14 +26,14 @@ Architecture reference: [Reliable cross-module domain events](static/document/ar
 
 | 模块 | 用途 |
 | --- | --- |
-| `middleware-server` | 运行时纯装配：启动类、基础配置与资源配置；不承载 Controller、Service、Mapper、Aspect 或业务任务 |
-| `middleware-common` | core、web、security 通用能力（结果、异常、Web 支持与认证上下文） |
-| `middleware-framework` | Markdown 与 OSS 的 starter / autoconfigure |
-| `middleware-module-system` | 用户、角色、登录、邮件、配额与监控 |
-| `middleware-module-note` | 笔记、主题、标签、关系与转换 |
-| `middleware-module-media` | 图片与对象存储业务 |
-| `middleware-module-audit` | 审核工作流 |
-| `middleware-module-audio` | 音频任务与 Redis Stream 工作流 |
+| `core-node-server` | 运行时纯装配：启动类、基础配置与资源配置；不承载 Controller、Service、Mapper、Aspect 或业务任务 |
+| `core-node-common` | core、web、security 通用能力（结果、异常、Web 支持与认证上下文） |
+| `core-node-framework` | Markdown 与 OSS 的 starter / autoconfigure |
+| `core-node-module-system` | 用户、角色、登录、邮件、配额与监控 |
+| `core-node-module-note` | 笔记、主题、标签、关系与转换 |
+| `core-node-module-media` | 图片与对象存储业务 |
+| `core-node-module-audit` | 审核工作流 |
+| `core-node-module-audio` | 音频任务与 Redis Stream 工作流 |
 
 ### 前端
 
@@ -87,7 +87,7 @@ echo %OSS_ACCESS_KEY_SECRET%
 | `jacolp.audio.callback-token` | 音频引擎回调认证令牌 |
 | `jacolp.audio.queue-type` | 音频生成与删除队列：`redis-stream`（默认）或 `rabbitmq`，可由 `AUDIO_QUEUE_TYPE` 注入 |
 
-本地开发可直接使用 `middleware-server/src/main/resources/application-dev.yaml` 中的默认值。
+本地开发可直接使用 `core-node-server/src/main/resources/application-dev.yaml` 中的默认值。
 
 ---
 
@@ -119,7 +119,7 @@ mvn clean install
 启动服务端模块：
 
 ```bash
-mvn -pl middleware-server spring-boot:run
+mvn -pl core-node-server spring-boot:run
 ```
 
 启动前端开发服务器（`frontend/` 目录下）：

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>com.jacolp</groupId><artifactId>core-node-module-media</artifactId><version>0.0.1-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+    <artifactId>core-node-module-media-biz</artifactId>
+    <dependencies>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-module-media-api</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-module-system-api</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-module-note-api</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-module-audit-api</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-common-core</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-common-messaging</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-common-security</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-common-web</artifactId></dependency>
+        <dependency><groupId>com.jacolp</groupId><artifactId>core-node-oss-starter</artifactId></dependency>
+        <dependency><groupId>com.github.pagehelper</groupId><artifactId>pagehelper-spring-boot-starter</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-aop</artifactId></dependency>
+        <dependency><groupId>org.mybatis.spring.boot</groupId><artifactId>mybatis-spring-boot-starter</artifactId></dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

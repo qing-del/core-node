@@ -10,31 +10,31 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.jacolp</groupId>
-    <artifactId>middleware</artifactId>
+    <artifactId>core-node</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>middleware</name>
-    <description>middleware</description>
+    <name>core-node</name>
+    <description>core-node</description>
 
     <modules>
-        <module>middleware-dependencies</module>
-        <module>middleware-common</module>
-        <module>middleware-framework</module>
-        <module>middleware-module-system</module>
-        <module>middleware-module-note</module>
-        <module>middleware-module-document</module>
-        <module>middleware-module-media</module>
-        <module>middleware-module-audit</module>
-        <module>middleware-module-audio</module>
-        <module>middleware-open-api</module>
-        <module>middleware-agent</module>
+        <module>core-node-dependencies</module>
+        <module>core-node-common</module>
+        <module>core-node-framework</module>
+        <module>core-node-module-system</module>
+        <module>core-node-module-note</module>
+        <module>core-node-module-document</module>
+        <module>core-node-module-media</module>
+        <module>core-node-module-audit</module>
+        <module>core-node-module-audio</module>
+        <module>core-node-open-api</module>
+        <module>core-node-agent</module>
 
-        <module>middleware-server</module>
+        <module>core-node-server</module>
     </modules>
 
     <properties>
         <spring-boot.version>4.0.5</spring-boot.version>
-        <middleware.version>0.0.1-SNAPSHOT</middleware.version>
+        <core-node.version>0.0.1-SNAPSHOT</core-node.version>
         <java.version>21</java.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <maven-enforcer.version>3.5.0</maven-enforcer.version>
@@ -57,8 +57,8 @@
         <dependencies>
             <dependency>
                 <groupId>com.jacolp</groupId>
-                <artifactId>middleware-dependencies</artifactId>
-                <version>${middleware.version}</version>
+                <artifactId>core-node-dependencies</artifactId>
+                <version>${core-node.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

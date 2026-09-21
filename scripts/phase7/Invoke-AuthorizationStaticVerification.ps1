@@ -87,7 +87,7 @@ try {
     $markdownPath = Join-Path $EvidenceDirectory ("phase7-static-summary-{0}.md" -f $stamp)
     $mavenArguments = @(
         '-o',
-        '-pl', ':middleware-common-security,:middleware-common-web,:middleware-module-system-biz,:middleware-server',
+        '-pl', ':core-node-common-security,:core-node-common-web,:core-node-module-system-biz,:core-node-server',
         '-am',
         '-Denforcer.skip=true',
         'test'
