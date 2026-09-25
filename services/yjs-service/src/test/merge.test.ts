@@ -3,12 +3,9 @@ import test from 'node:test';
 
 import * as Y from 'yjs';
 
-import {
-  InvalidMergeRequestError,
-  migrateYjsNodeIdentity,
-  NodeIdentityMigrationError,
-  mergeYjsState,
-} from '../merge.js';
+import { mergeYjsState } from '../merge.js';
+import { migrateYjsNodeIdentity, NodeIdentityMigrationError } from '../node-identity.js';
+import { InvalidMergeRequestError } from '../state.js';
 
 test('duplicate updates merge to the same Yjs document state', () => {
   const source = new Y.Doc();

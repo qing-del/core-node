@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import * as Y from 'yjs';
 
-import { createMergeServer } from '../server.js';
+import { createYjsServer } from '../server.js';
 
 test('POST /internal/yjs/merge returns a merged base64 Yjs state', async () => {
   await withServer(async (baseUrl) => {
@@ -23,6 +23,22 @@ test('POST /internal/yjs/merge returns a merged base64 Yjs state', async () => {
     const result = new Y.Doc();
     Y.applyUpdate(result, Buffer.from(body.mergedState, 'base64'));
     assert.equal(result.getText('content').toString(), 'service result');
+  });
+});
+
+test('merge endpoint accepts the empty state used by the Docker health check', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/internal/yjs/merge`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseState: null, updates: [] }),
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json() as { mergedState: string };
+    const result = new Y.Doc();
+    Y.applyUpdate(result, Buffer.from(body.mergedState, 'base64'));
+    assert.equal(result.getXmlFragment('content').length, 0);
   });
 });
 
@@ -79,7 +95,7 @@ test('merge endpoint rejects invalid requests and does not expose extra routes',
 });
 
 async function withServer(action: (baseUrl: string) => Promise<void>): Promise<void> {
-  const server = createMergeServer();
+  const server = createYjsServer();
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
 

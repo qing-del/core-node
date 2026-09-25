@@ -1,25 +1,21 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
-import {
-  InvalidMergeRequestError,
-  migrateYjsNodeIdentity,
-  NodeIdentityMigrationError,
-  mergeYjsState,
-  type YjsMergeRequest,
-} from './merge.js';
+import { mergeYjsState } from './merge.js';
+import { migrateYjsNodeIdentity, NodeIdentityMigrationError } from './node-identity.js';
+import { InvalidMergeRequestError, type YjsMergeRequest } from './state.js';
 
 const MERGE_PATH = '/internal/yjs/merge';
 const NODE_IDENTITY_MIGRATION_PATH = '/internal/yjs/node-identity/migrate';
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
-/** 创建只提供内部 Yjs 合并接口的无状态 HTTP 服务。 */
-export function createMergeServer(): Server {
+/** 创建提供内部 Yjs 状态操作接口的无状态 HTTP 服务。 */
+export function createYjsServer(): Server {
   return createServer(async (request, response) => {
     try {
       await handleRequest(request, response);
     } catch (error) {
       writeJson(response, 500, { error: 'internal merge service error' });
-      console.error('Unexpected merge service error', error);
+      console.error('Unexpected Yjs service error', error);
     }
   });
 }
@@ -78,10 +74,10 @@ function writeJson(response: ServerResponse, statusCode: number, body: unknown):
   response.end(JSON.stringify(body));
 }
 
-// 直接运行该模块时启动监听；被测试导入时只暴露 createMergeServer。
+// 直接运行该模块时启动监听；被测试导入时只暴露 createYjsServer。
 if (process.argv[1] !== undefined && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
-  const server = createMergeServer();
+  const server = createYjsServer();
   server.listen(3100, '0.0.0.0', () => {
-    console.info('yjs-merge-service listening on port 3100');
+    console.info('yjs-service listening on port 3100');
   });
 }

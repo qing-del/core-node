@@ -207,8 +207,8 @@ jacolp:
     queue-type: ${AUDIO_QUEUE_TYPE:redis-stream}
   image:
     delete-image-task-time: 60  # 单位是分钟
-  yjs-merge-service:
-    base-url: ${YJS_MERGE_SERVICE_BASE_URL:http://127.0.0.1:3100}
+  yjs-service:
+    base-url: ${YJS_SERVICE_BASE_URL:http://127.0.0.1:3100}
   document:
     enabled: ${DOCUMENT_ENABLED:true}
     # v0.7 file 投影、Canal 增量和历史身份迁移都必须显式开启。

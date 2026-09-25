@@ -2,7 +2,7 @@ package com.jacolp.document.application.yjs;
 
 import java.util.List;
 
-import com.jacolp.document.config.YjsMergeServiceProperties;
+import com.jacolp.document.config.YjsServiceProperties;
 import com.jacolp.document.metrics.DocumentMetrics;
 import io.micrometer.core.instrument.Timer;
 import java.util.Objects;
@@ -26,7 +26,7 @@ public class HttpYjsMergeClient implements YjsMergeClient {
     private final DocumentMetrics metrics;
 
     /** 使用配置的服务地址创建不记录指标的 HTTP 客户端。 */
-    public HttpYjsMergeClient(YjsMergeServiceProperties properties) {
+    public HttpYjsMergeClient(YjsServiceProperties properties) {
         this(RestClient.create(properties.requireBaseUrl()), DocumentMetrics.noop());
     }
 
@@ -37,7 +37,7 @@ public class HttpYjsMergeClient implements YjsMergeClient {
 
     /** 使用配置地址和指标组件创建生产客户端。 */
     @Autowired
-    public HttpYjsMergeClient(YjsMergeServiceProperties properties, DocumentMetrics metrics) {
+    public HttpYjsMergeClient(YjsServiceProperties properties, DocumentMetrics metrics) {
         this(RestClient.create(properties.requireBaseUrl()), metrics);
     }
 

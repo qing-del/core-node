@@ -6,21 +6,21 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
-class YjsMergeServicePropertiesTest {
+class YjsServicePropertiesTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(DocumentModuleConfiguration.class);
 
     @Test
-    void shouldBindMergeServiceBaseUrl() {
-        contextRunner.withPropertyValues("jacolp.yjs-merge-service.base-url=http://localhost:3100")
-                .run(context -> assertThat(context.getBean(YjsMergeServiceProperties.class).requireBaseUrl())
+    void shouldBindYjsServiceBaseUrl() {
+        contextRunner.withPropertyValues("jacolp.yjs-service.base-url=http://localhost:3100")
+                .run(context -> assertThat(context.getBean(YjsServiceProperties.class).requireBaseUrl())
                         .isEqualTo("http://localhost:3100"));
     }
 
     @Test
-    void shouldRejectMissingMergeServiceBaseUrlWhenRequired() {
+    void shouldRejectMissingYjsServiceBaseUrlWhenRequired() {
         contextRunner.run(context -> assertThatIllegalStateException()
-                .isThrownBy(() -> context.getBean(YjsMergeServiceProperties.class).requireBaseUrl()));
+                .isThrownBy(() -> context.getBean(YjsServiceProperties.class).requireBaseUrl()));
     }
 }
